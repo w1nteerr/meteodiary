@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% load static %}{% block title %}Анонимное наблюдение{% endblock %}
+{% block content %}
+<div class="auth-hero">
+  <img src="{% static 'img/anon-48.png' %}" alt="" width="42" height="42"
+       style="vertical-align:middle;opacity:.85">
+  <div class="auth-title" style="display:inline-block;margin-left:8px;vertical-align:middle">
+    Анонимное наблюдение</div>
+  <div class="auth-sub">Поделитесь замером без регистрации — данные попадут
+  на проверку модератору, а на карте будут отмечены как анонимные.</div>
+</div>
+<div class="card auth form-card" style="max-width:520px">
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    {# Тип наблюдения — сегмент-переключатель подставляется скриптом ниже #}
+    <div id="row-obs_type">
+      <label>{{ form.obs_type.label }}</label>{{ form.obs_type }}{{ form.obs_type.errors }}
+    </div>
+
+    {# Координаты места: заменяют выбор точки из списка. Видны всегда. #}
+    <div class="coord-grid">
+      <div id="row-latitude">
+        <label>{{ form.latitude.label }}</label>{{ form.latitude }}{{ form.latitude.errors }}
+      </div>
+      <div id="row-longitude">
+        <label>{{ form.longitude.label }}</label>{{ form.longitude }}{{ form.longitude.errors }}
+      </div>
+    </div>
+    <div id="row-place_name">
+      <label>{{ form.place_name.label }}</label>{{ form.place_name }}{{ form.place_name.errors }}
+    </div>
+    <p class="muted" style="font-size:12.5px;margin:-2px 0 4px">
+      Координаты можно скопировать из карт (правый клик по месту в
+      Яндекс.Картах или Google Maps).</p>
+
+    {# Дата и метеополя — управляются переключателем типа #}
+    <div id="row-observed_at">
+      <label>{{ form.observed_at.label }}</label>{{ form.observed_at }}{{ form.observed_at.errors }}
+    </div>
+    {% for f in form.visible_fields %}
+      {% if f.name != "obs_type" and f.name != "latitude" and f.name != "longitude" and f.name != "place_name" and f.name != "observed_at" %}
+      <div id="row-{{ f.name }}">
+        <label>{{ f.label }}</label>{{ f }}{{ f.errors }}
+      </div>
+      {% endif %}
+    {% endfor %}
+    {{ form.website }}
+    <p style="margin-top:16px"><button type="submit" style="width:100%">Отправить на проверку</button></p>
+  </form>
+  {% include "observations/_obs_type_switch.html" %}
+  <p class="muted" style="text-align:center">Хотите вести свои точки и получать
+  достижения? <a href="{% url 'register' %}">Зарегистрируйтесь</a> — это бесплатно.</p>
+</div>
+{% endblock %}

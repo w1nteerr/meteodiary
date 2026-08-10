@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Регистрация{% endblock %}
+{% block content %}
+<div class="auth-hero">
+  <div class="auth-title">☀ Дневник синоптика</div>
+  <div class="auth-sub">Создайте аккаунт наблюдателя</div>
+</div>
+<div class="card auth" style="max-width:480px">
+<h2>Регистрация</h2>
+<form method="post">{% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for f in form.visible_fields %}
+    <label>{% if f.name == "captcha" %}Проверка: {{ captcha_q }}{% else %}{{ f.label }}{% endif %}</label>
+    {{ f }}{{ f.errors }}
+    {% if f.help_text %}<div class="muted">{{ f.help_text|safe }}</div>{% endif %}
+  {% endfor %}
+  <p><button type="submit">Зарегистрироваться</button></p>
+  <p class="muted">Забыли пароль после регистрации? <a href="{% url 'password_reset' %}">Восстановление пароля</a></p>
+</form>
+</div>
+{% endblock %}

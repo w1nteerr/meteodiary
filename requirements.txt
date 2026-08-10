@@ -1,0 +1,10 @@
+Django==4.2.*
+djangorestframework>=3.14
+drf-spectacular>=0.27      # документация API (Swagger/OpenAPI, ТЗ 4.7.3)
+django-allauth[socialaccount]>=65   # вход через сторонние сервисы (VK ID)
+Pillow>=10.0
+reportlab>=4.0
+celery>=5.3
+redis>=5.0            # продакшен: брокер Celery
+psycopg2-binary>=2.9  # продакшен: PostgreSQL
+gunicorn>=21.0        # продакшен: WSGI-сервер

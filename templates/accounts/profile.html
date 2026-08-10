@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Профиль{% endblock %}
+{% block content %}
+<h2>Профиль: {{ user.username }}</h2>
+<div class="card"><h3>Смена e-mail (текущий: {{ user.email|default:"—" }})</h3>
+<form method="post">{% csrf_token %}{{ email_form.as_p }}
+<button name="change_email">Сменить e-mail</button></form></div>
+<div class="card"><h3>Смена пароля</h3>
+<form method="post">{% csrf_token %}{{ pwd_form.as_p }}
+<button name="change_password">Сменить пароль</button></form></div>
+<div class="card"><h3>Доступ к API (точка входа для приёма данных)</h3>
+<p class="muted">Токен передаётся в заголовке <code>Authorization: Token &lt;ключ&gt;</code>.
+Приём наблюдений: <code>POST /api/v1/observations/</code>; документация — <a href="/api/docs/">/api/docs/</a>.
+{% if has_token %}Токен выпущен. Перевыпуск аннулирует старый.{% else %}Токен ещё не выпускался.{% endif %}</p>
+<form method="post">{% csrf_token %}
+<button name="api_token" class="sec">{% if has_token %}Перевыпустить токен{% else %}Выпустить токен{% endif %}</button></form></div>
+<div class="card"><h3>Удаление аккаунта</h3>
+<p class="muted">Персональные данные будут затёрты, наблюдения останутся в архиве как анонимные. Операция необратима.</p>
+<form method="post">{% csrf_token %}{{ del_form.as_p }}
+<button class="danger" name="delete_account">Удалить аккаунт</button></form></div>
+{% endblock %}

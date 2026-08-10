@@ -1,0 +1,446 @@
+{% extends "base.html" %}{% load static %}{% block title %}Дашборд{% endblock %}
+{% block content %}
+<div class="dash">
+
+  <!-- Заголовок + быстрые действия -->
+  <div class="dash-head">
+    <h2>Дашборд</h2>
+    <div class="dash-actions">
+      <a class="btn" href="{% url 'observation_create' %}">Внести наблюдение</a>
+      <a class="btn sec" href="{% url 'report_create' %}">Отчёт</a>
+      <a class="btn sec" href="{% url 'map' %}">Карта</a>
+    </div>
+  </div>
+
+  <!-- Метрики -->
+  <div class="panel">
+    <div class="m-grid">
+      <div class="m"><div class="m-num">{{ total_approved }}</div>
+        <div class="m-label">Подтверждённых всего</div></div>
+      <div class="m"><div class="m-num">{{ month_approved }}</div>
+        <div class="m-label">За 30 дней</div></div>
+      <div class="m"><div class="m-num">{{ stations_active }}</div>
+        <div class="m-label">Активных точек</div></div>
+      <div class="m"><div class="m-num">{{ my_observations }}</div>
+        <div class="m-label">Моих наблюдений{% if my_pending %} · проверка: {{ my_pending }}{% endif %}{% if my_rework %} · <a href="{% url 'my_observations' %}?status=rework">доработка: {{ my_rework }}</a>{% endif %}</div></div>
+      {% if user.is_moderator %}
+      <div class="m acc"><div class="m-num">{{ queue_count }}</div>
+        <div class="m-label"><a href="{% url 'moderation_queue' %}">Очередь модерации</a>{% if queue_anomaly %} · аномалий: {{ queue_anomaly }} ⚠{% endif %}</div></div>
+      {% endif %}
+      {% if user.is_admin_role %}
+      <div class="m"><div class="m-num">{{ users_total }}</div>
+        <div class="m-label"><a href="/admin/accounts/user/">Пользователей</a>{% if users_blocked %} · блок: {{ users_blocked }}{% endif %}</div></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if agg.t_avg %}
+  <div class="panel"><h3>Итоги за 30 дней</h3>
+    <div class="chips">
+      <div class="chip"><b>{{ agg.t_min|floatformat:1 }} °C</b><span>t мин</span></div>
+      <div class="chip"><b>{{ agg.t_avg|floatformat:1 }} °C</b><span>t средняя</span></div>
+      <div class="chip"><b>{{ agg.t_max|floatformat:1 }} °C</b><span>t макс</span></div>
+      <div class="chip"><b>{{ agg.p_avg|floatformat:1 }}</b><span>давление, гПа</span></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Главный график -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3 style="margin:0">Температура и давление</h3>
+      <div class="seg" id="tp-range">
+        <button class="on" data-d="7">7 дней</button>
+        <button data-d="14">14 дней</button>
+        <button data-d="30">30 дней</button>
+      </div>
+    </div>
+    <div class="ch" style="height:320px;max-width:100%;margin-top:16px">
+      <div class="skel" id="sk-tp"></div><canvas id="d-tp" hidden></canvas>
+    </div>
+  </div>
+
+  {# Аллергосводка. Иконка чихания: Victoruler / Flaticon — flaticon.com/free-icons/sneeze #}
+  <div class="panel allergy-panel" id="allergy-panel" hidden>
+    <h3>Аллергосводка (30 дней)</h3>
+    <div class="allergy-row">
+      <img src="{% static 'img/sneeze-64.png' %}" alt="" class="allergy-ico" width="56" height="56">
+      <div class="allergy-main">
+        <div id="allergy-level" class="allergy-level">—</div>
+        <div id="allergy-sub" class="muted" style="font-size:12.5px"></div>
+      </div>
+    </div>
+    <div class="allergy-chart-title">Уровень по аллергенам</div>
+    <div class="ch allergy-ch" style="height:220px;margin-top:6px">
+      <canvas id="d-allergy"></canvas></div>
+  </div>
+
+  <div class="dash-grid2">
+    <div class="panel"><h3>Осадки по дням, мм</h3>
+      <div class="ch" style="height:230px">
+        <div class="skel" id="sk-precip"></div><canvas id="d-precip" hidden></canvas></div></div>
+    <div class="panel"><h3>Погодные явления (топ)</h3>
+      <div class="ch" style="height:230px">
+        <div class="skel" id="sk-phen"></div><canvas id="d-phen" hidden></canvas></div></div>
+  </div>
+
+  <div class="dash-grid2">
+    <div class="panel"><h3>{% if user.is_moderator %}Статусы всех наблюдений{% else %}Статусы моих наблюдений{% endif %}</h3>
+      <div class="donut-wrap">
+        <div class="ch" style="height:190px;width:190px">
+          <div class="skel" id="sk-status"></div><canvas id="d-status" hidden></canvas></div>
+        <ul class="dl" id="dl-status"></ul>
+      </div></div>
+    <div class="panel"><h3>Роза ветров (30 дней)</h3>
+      <div class="ch ch-rose" style="height:230px;max-width:280px">
+        <div class="skel" id="sk-rose"></div><canvas id="d-rose" hidden></canvas></div>
+      <p class="muted" style="text-align:center;margin:10px 0 0">Чем больше сектор — тем чаще
+      ветер с этой стороны; насыщенность — средняя скорость.</p></div>
+  </div>
+
+  {% if achievements %}
+  <div class="panel"><h3>Достижения</h3>
+    <div class="ach-grid">
+      {% for a in achievements %}
+      <div class="ach {% if a.earned %}earned{% endif %}" title="{{ a.desc }}">
+        <span class="ach-ico">{{ a.icon }}</span>
+        <div><b>{{ a.title }}</b><div class="ach-desc">{{ a.desc }}</div></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+<div id="cht"></div>
+{% endblock %}
+
+{% block head %}
+<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
+<script defer>
+document.addEventListener("DOMContentLoaded", async () => {
+  // ------- Общие помощники -------
+  const css = getComputedStyle(document.documentElement);
+  const v = name => css.getPropertyValue(name).trim();
+  const ACC = v("--ch-acc") || v("--b") || "#2f6e51";  // запасной акцент графиков
+  const ACC_D = v("--b2") || "#0f1011";               // цифра в центре доната
+  const SKY = v("--ch-sky") || "#2f9fe0";             // небесный: осадки, вода
+  const ROSE = v("--ch-rose") || "#232426";           // графит розы ветров
+  // Цвета графиков зависят от темы: каждая тема задаёт свои --ch-* в CSS,
+  // JS просто читает их при загрузке (страница перезагружается при смене темы)
+  const GRID = v("--grid") || "#e8eef4", MUT = v("--mut") || "#5f7385";
+  const WARM = v("--ch-warm") || "#1c1d1f";  // линия температуры (цвет темы)
+  const tint = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  };
+  // показать canvas вместо скелетона
+  const reveal = id => {
+    const sk = document.getElementById("sk-" + id);
+    if (sk) sk.remove();
+    document.getElementById("d-" + id).hidden = false;
+  };
+  // аккуратное пустое состояние вместо графика
+  const empty = (id, text) => {
+    const box = document.getElementById("d-" + id).parentElement;
+    box.innerHTML = `<div class="dash-empty">${text}</div>`;
+  };
+
+  if (typeof Chart === "undefined") {   // библиотека не загрузилась — цифры видны
+    document.querySelectorAll(".skel").forEach(el =>
+      el.outerHTML = '<div class="dash-empty">График недоступен</div>');
+    return;
+  }
+  Chart.defaults.font.family = "system-ui, 'Segoe UI', Arial, sans-serif";
+  Chart.defaults.color = MUT;
+  Chart.defaults.maintainAspectRatio = false;
+
+  // Кастомный HTML-тултип вместо дефолтного холста Chart.js
+  const chtEl = document.getElementById("cht");
+  function htmlTooltip(ctx) {
+    const t = ctx.tooltip;
+    if (!t || t.opacity === 0) { chtEl.style.opacity = 0; return; }
+    const title = t.title ? `<b>${t.title[0]}</b><br>` : "";
+    chtEl.innerHTML = title + t.body.map((b, i) => {
+      const c = t.labelColors[i] || {};
+      return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;` +
+             `background:${c.borderColor || c.backgroundColor || "#888"};margin-right:6px"></span>` +
+             b.lines.join(" ");
+    }).join("<br>");
+    const r = ctx.chart.canvas.getBoundingClientRect();
+    chtEl.style.left = (r.left + window.scrollX + t.caretX + 14) + "px";
+    chtEl.style.top = (r.top + window.scrollY + t.caretY - 10) + "px";
+    chtEl.style.opacity = 1;
+  }
+  const noTip = { enabled: false, external: htmlTooltip };
+
+  // Любая ошибка при построении графика больше не молчит: выводим её
+  // текстом прямо в панель, чтобы причину было видно без консоли
+  const guard = (id, fn) => { try { fn(); } catch (e) {
+    empty(id, "Ошибка графика: " + e.message); } };
+
+  // ------- Данные -------
+  let d;
+  try {
+    d = await (await fetch("{% url 'api_dashboard' %}")).json();
+  } catch (e) {
+    document.querySelectorAll(".skel").forEach(el =>
+      el.outerHTML = '<div class="dash-empty">Не удалось загрузить данные</div>');
+    return;
+  }
+  const day = s => s.slice(8, 10) + "." + s.slice(5, 7);
+  const fmt = t => new Date(t).toLocaleString("ru",
+    { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+  // ------- 1. Температура/давление: градиент, пунктир, диапазон 7/14/30 -------
+  reveal("tp");
+  if (!d.series.length) empty("tp", "Пока нет подтверждённых наблюдений за период");
+  else guard("tp", () => {
+    const cnv = document.getElementById("d-tp");
+    const grad = cnv.getContext("2d").createLinearGradient(0, 0, 0, 300);
+    grad.addColorStop(0, tint(WARM, .32));
+    grad.addColorStop(1, tint(WARM, 0));
+    const chart = new Chart(cnv, {
+      type: "line",
+      data: { labels: [], datasets: [
+        { label: "Температура, °C", data: [], yAxisID: "y", tension: .35,
+          borderColor: WARM, borderWidth: 2, pointRadius: 0, pointHitRadius: 8 },
+        { label: "Давление, гПа", data: [], yAxisID: "y1", tension: .35,
+          borderColor: v("--ch-cool") || "#8a8b90", borderWidth: 1.5, borderDash: [5, 4],
+          pointRadius: 0, pointHitRadius: 8 }]},
+      options: { interaction: { mode: "index", intersect: false },
+        plugins: { tooltip: noTip,
+          legend: { labels: { boxWidth: 12, boxHeight: 12 } } },
+        scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 9 } },
+                  y: { grid: { color: GRID } },
+                  y1: { position: "right", grid: { drawOnChartArea: false } } } }
+    });
+    // температура с градиентной заливкой
+    chart.data.datasets[0].fill = true;
+    chart.data.datasets[0].backgroundColor = grad;
+    // фильтрация уже загруженного ряда на клиенте, без новых запросов
+    function setRange(days) {
+      const cutoff = Date.now() - days * 864e5;
+      const rows = d.series.filter(p => new Date(p.t).getTime() >= cutoff);
+      // Сырых замеров много (все точки сети) — линия выходит шумной.
+      // Агрегируем по 6-часовым интервалам: график становится читаемым.
+      const buckets = new Map();
+      for (const p of rows) {
+        const ts = Math.floor(new Date(p.t).getTime() / (6 * 36e5)) * 6 * 36e5;
+        const b = buckets.get(ts) || { t: 0, p: 0, n: 0, np: 0 };
+        b.t += Number(p.temp); b.n++;
+        if (p.pressure != null) { b.p += Number(p.pressure); b.np++; }
+        buckets.set(ts, b);
+      }
+      const keys = [...buckets.keys()].sort((a, b) => a - b);
+      chart.data.labels = keys.map(k => fmt(k));
+      chart.data.datasets[0].data = keys.map(k =>
+        +(buckets.get(k).t / buckets.get(k).n).toFixed(1));
+      chart.data.datasets[1].data = keys.map(k => {
+        const b = buckets.get(k);
+        return b.np ? +(b.p / b.np).toFixed(1) : null;   // нет замеров давления
+      });
+      chart.update();
+    }
+    setRange(7);   // по умолчанию — неделя
+    document.getElementById("tp-range").addEventListener("click", e => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      document.querySelectorAll("#tp-range button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      setRange(Number(b.dataset.d));
+    });
+  });
+
+  // ------- 2. Осадки: нулевые дни приглушены -------
+  reveal("precip");
+  const days14 = d.days.slice(-14), off = d.days.length - days14.length;
+  const precipVals = d.daily_precip.slice(off);
+  if (!days14.length) empty("precip", "Нет данных");
+  else guard("precip", () => new Chart(document.getElementById("d-precip"), {
+    type: "bar",
+    data: { labels: days14.map(day),
+      datasets: [{ label: "мм", data: precipVals,
+        backgroundColor: precipVals.map(x => x > 0 ? tint(SKY, .45) : tint(SKY, .12)),
+        borderColor: precipVals.map(x => x > 0 ? tint(SKY, .9) : tint(SKY, .25)),
+        borderWidth: 1, borderRadius: 6, maxBarThickness: 22 }]},
+    options: { plugins: { legend: { display: false }, tooltip: noTip },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: GRID } } } }
+  }));
+
+  // ------- 3. Явления: топ-8 по убыванию -------
+  reveal("phen");
+  // Цвет явления подбирается по смыслу названия: гроза — фиолетовый,
+  // дождь — голубой, снег — ледяной, туман — серый и т.д. Для каждой темы
+  // свой оттенок (в тёмной — светлее). Неопознанные явления — серая лестница.
+  const DK = document.documentElement.dataset.theme === "dark";
+  function phenColor(name, i) {
+    const n = String(name).toLowerCase();
+    if (/гроз|молни/.test(n))            return DK ? "#b09ae8" : "#7c5cbf";
+    if (/ливен|дожд|морос/.test(n))      return DK ? "#7ec3f0" : "#3a9fe0";
+    if (/снег|метел|пурга|вьюга/.test(n))return DK ? "#c4e4f2" : "#7fb8d4";
+    if (/град/.test(n))                  return DK ? "#9fd4e0" : "#4f9ab0";
+    if (/туман|мгла|дым/.test(n))        return DK ? "#a8aeb6" : "#8a9098";
+    if (/гололёд|гололед|иней|излом/.test(n)) return DK ? "#a8d0e0" : "#6f9fb8";
+    if (/роса/.test(n))                  return DK ? "#7ed4c4" : "#4faf9f";
+    if (/шквал|буря|ураган|смерч/.test(n)) return DK ? "#e0b45e" : "#c07a2e";
+    if (/пыл|песч/.test(n))              return DK ? "#e0bc6a" : "#c9a13c";
+    return tint(ROSE, .8 - i * .08);     // запасная серая лестница по месту в топе
+  }
+  const phen = Object.entries(d.phenomena).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!phen.length) empty("phen", "Явления за период не отмечались");
+  else guard("phen", () => new Chart(document.getElementById("d-phen"), {
+    type: "bar",
+    data: { labels: phen.map(x => x[0]),
+      datasets: [{ data: phen.map(x => x[1]),
+        backgroundColor: phen.map((x, i) => phenColor(x[0], i)),
+        borderRadius: 7, maxBarThickness: 24 }]},
+    options: { indexAxis: "y",
+      plugins: { legend: { display: false }, tooltip: noTip },
+      scales: { x: { grid: { color: GRID }, ticks: { precision: 0 } },
+                y: { grid: { display: false } } } }
+  }));
+
+  // ------- 4. Статусы: donut с итогом в центре + легенда с процентами -------
+  reveal("status");
+  const codes = Object.keys(d.statuses);
+  const colors = { draft: v("--ch-draft") || "#9a9186",
+                   pending: v("--ch-pending") || "#c07a4e",
+                   approved: v("--ch-ok") || "#6b8e3e",
+                   rework: v("--ch-rework") || "#d9a136",
+                   rejected: v("--ch-rejected") || "#b03a2e" };
+  const total = codes.reduce((s, c) => s + d.statuses[c], 0);
+  if (!total) empty("status", "Наблюдений пока нет");
+  else guard("status", () => {
+    // подпись «всего» в центре доната
+    const centerText = { id: "ct", beforeDraw(c) {
+      const { width, height, ctx } = c;
+      ctx.save();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = "800 24px system-ui"; ctx.fillStyle = ACC_D;
+      ctx.fillText(String(total), width / 2, height / 2 - 6);
+      ctx.font = "11px system-ui"; ctx.fillStyle = MUT;
+      ctx.fillText("всего", width / 2, height / 2 + 14);
+      ctx.restore();
+    }};
+    // «Стеклянные» сегменты: полупрозрачная заливка + тонкая цветная кромка,
+    // скруглённые торцы и зазоры. Если статус остался один (частый случай:
+    // все наблюдения подтверждены) — рисуем цельное кольцо без зазоров и
+    // скруглений, иначе одиночный сегмент выглядит разорванным.
+    const nz = codes.filter(c => d.statuses[c] > 0);
+    const multi = nz.length > 1;
+    new Chart(document.getElementById("d-status"), {
+      type: "doughnut", plugins: [centerText],
+      data: { labels: codes.map(c => d.status_labels[c] || c),
+        datasets: [{ data: codes.map(c => d.statuses[c]),
+          backgroundColor: codes.map(c => tint(colors[c] || "#888", .45)),
+          hoverBackgroundColor: codes.map(c => tint(colors[c] || "#888", .7)),
+          borderColor: codes.map(c => colors[c] || "#888"),
+          borderWidth: 1.5,
+          borderRadius: multi ? 10 : 0,
+          spacing: multi ? 3 : 0 }]},
+      options: { cutout: "72%",
+        plugins: { legend: { display: false }, tooltip: noTip } }
+    });
+    // --- аллергосводка ---
+    const ag = d.allergy;
+    if (ag && ag.total > 0) {
+      const panel = document.getElementById("allergy-panel");
+      panel.hidden = false;
+      const LEVEL_COLORS = { low: "#6b8e3e", medium: "#d9a13c",
+                             high: "#d9702e", very_high: "#c9554a" };
+      const el = document.getElementById("allergy-level");
+      const sm = ag.summary;
+      if (sm && sm.peak_level > 0) {
+        // Заголовок — ПИКОВЫЙ уровень за 30 дней по всем точкам, а не одно
+        // последнее наблюдение (данные собраны с разных мест).
+        // Заголовок — нейтральная подпись обычным цветом текста; сам пиковый
+        // уровень показываем в строке ниже, чтобы не было цветного «Очень
+        // высокий» без пояснения, к чему он относится.
+        el.textContent = "Уровень пыльцы";
+        el.style.color = "var(--tx)";
+        const plur = (n, one, few, many) => {
+          const m10 = n % 10, m100 = n % 100;
+          if (m10 === 1 && m100 !== 11) return one;
+          if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+          return many;
+        };
+        const peakNames = sm.peak_allergens.length
+          ? sm.peak_allergens.slice(0, 3).join(", ")
+            + (sm.peak_allergens.length > 3 ? " и др." : "")
+          : "";
+        document.getElementById("allergy-sub").textContent =
+          `Максимум за 30 дней: ${sm.peak_label.toLowerCase()}` +
+          (peakNames ? ` · ${peakNames}` : "") +
+          ` · ${sm.stations} ${plur(sm.stations, "точка", "точки", "точек")}` +
+          ` · ${sm.allergens} ${plur(sm.allergens, "аллерген", "аллергена", "аллергенов")}` +
+          ` · ${ag.total} ${plur(ag.total, "наблюдение", "наблюдения", "наблюдений")}`;
+      }
+      // График уровня по каждому аллергену: горизонтальная полоса на аллерген,
+      // длина и цвет = максимальный зафиксированный уровень пыльцы. Отвечает на
+      // вопрос «какой аллерген сейчас опаснее», а не «сколько было замеров».
+      const LEVEL_NAMES = ["", "Низкий", "Средний", "Высокий", "Очень высокий"];
+      const LEVEL_ORDER = ["low", "medium", "high", "very_high"];
+      const rows = (ag.by_allergen || []);
+      if (window.Chart && rows.length) {
+        new Chart(document.getElementById("d-allergy"), {
+          type: "bar",
+          data: { labels: rows.map(a => a.name),
+            datasets: [{ data: rows.map(a => a.level),
+              backgroundColor: rows.map(a =>
+                tint(LEVEL_COLORS[LEVEL_ORDER[a.level - 1]] || "#8a8b90", .5)),
+              borderColor: rows.map(a =>
+                LEVEL_COLORS[LEVEL_ORDER[a.level - 1]] || "#8a8b90"),
+              borderWidth: 1, borderRadius: 6, maxBarThickness: 26 }]},
+          options: {
+            indexAxis: "y",   // горизонтальные полосы — имена аллергенов слева
+            plugins: { legend: { display: false },
+              tooltip: { enabled: false, external: htmlTooltip,
+                callbacks: { label: c =>
+                  `${LEVEL_NAMES[c.raw] || "—"} · наблюдений: ${rows[c.dataIndex].count}` } } },
+            scales: {
+              x: { beginAtZero: true, max: 4, grid: { color: GRID },
+                   ticks: { stepSize: 1, color: MUT, font: { size: 11 },
+                            callback: v => LEVEL_NAMES[v] || "" } },
+              y: { grid: { display: false }, ticks: { color: MUT, font: { size: 12 } } } } }
+        });
+      } else {
+        document.querySelector(".allergy-ch").style.display = "none";
+        document.querySelector(".allergy-chart-title").style.display = "none";
+      }
+    }
+
+    document.getElementById("dl-status").innerHTML = codes.map(c => {
+      const n = d.statuses[c], raw = n / total * 100;
+      // доли меньше процента показываем как «<1%», а не обманчивый «0%»
+      const pc = raw > 0 && raw < 1 ? "<1%" : Math.round(raw) + "%";
+      return `<li><span class="dot" style="background:${colors[c] || "#888"}"></span>` +
+             `${d.status_labels[c] || c} — ${n}<span class="pc">${pc}</span></li>`;
+    }).join("");
+  });
+
+  // ------- 5. Роза ветров: насыщенность сектора — средняя скорость -------
+  reveal("rose");
+  const RU_RUMBS = ["С","ССВ","СВ","ВСВ","В","ВЮВ","ЮВ","ЮЮВ",
+                    "Ю","ЮЮЗ","ЮЗ","ЗЮЗ","З","ЗСЗ","СЗ","ССЗ"];
+  const wr = d.wind_rose;
+  if (!wr.counts.some(x => x > 0)) empty("rose", "Данных о ветре нет");
+  else guard("rose", () => {
+    // Нарочно самая простая конфигурация polarArea — без кастомных
+    // тултипов и подписей секторов: максимум надёжности отрисовки
+    const mx = Math.max(1, ...wr.counts);
+    new Chart(document.getElementById("d-rose"), {
+      type: "polarArea",
+      data: { labels: RU_RUMBS,
+        datasets: [{ data: wr.counts,
+          backgroundColor: wr.counts.map(v =>
+            tint(ROSE, +(.16 + .55 * v / mx).toFixed(2))),
+          borderColor: tint(ROSE, .85), borderWidth: 1 }]},
+      options: { plugins: { legend: { display: false } },
+        scales: { r: { grid: { circular: true, color: GRID },
+          ticks: { precision: 0, backdropColor: "transparent" } } } }
+    });
+  });
+});
+</script>
+{% endblock %}

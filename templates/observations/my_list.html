@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}Мои наблюдения{% endblock %}
+{% block content %}
+<h2>Мои наблюдения</h2>
+<div class="card">
+<form method="get" class="filters">
+  <div><label>Статус</label><select name="status">
+    <option value="">Все</option>
+    {% for code, name in statuses %}
+      <option value="{{ code }}" {% if code == cur_status %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}</select></div>
+  <div><button>Фильтровать</button></div>
+</form>
+</div>
+<div class="card">
+<div class="rows">
+{% for o in page %}
+  <article class="row-card">
+    <div class="row-main">
+      <div class="row-title">
+        {{ o.station }}
+        <span class="badge {{ o.status }}">{{ o.get_status_display }}</span>
+        {% if o.is_anomaly %}<span class="badge rework" title="Аномалия">⚠ аномалия</span>{% endif %}
+      </div>
+      <div class="row-meta">
+        {{ o.observed_at|date:"d.m.Y H:i" }} · {{ o.get_obs_type_display|lower }}
+        {% if o.resubmit_count %} · отправок {{ o.resubmit_count }}/{{ max_resubmits }}{% endif %}
+      </div>
+      <div class="row-facts">
+        {% if o.temperature is not None %}<span><b>{{ o.temperature }}</b> °C</span>{% endif %}
+        {% if o.pressure is not None %}<span>{{ o.pressure }} гПа</span>{% endif %}
+        {% if o.obs_type == "allergy" %}
+          <span>пыльца: {{ o.get_pollen_level_display|lower }}{% if o.allergen %} · {{ o.allergen }}{% endif %}</span>
+        {% elif o.precipitation_type %}
+          <span>{{ o.precipitation_type }}, {{ o.precipitation_amount }} мм</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="row-actions">
+      {% if o.status == "rework" and o.resubmit_count < max_resubmits %}
+        <a class="btn" href="{% url 'observation_rework' o.pk %}">Доработать</a>{% endif %}
+      {% if o.status != "approved" %}
+      <form method="post" action="{% url 'observation_delete' o.pk %}"
+            onsubmit="return confirm('Удалить наблюдение от {{ o.observed_at|date:'d.m.Y H:i' }}?')">
+        {% csrf_token %}<button class="sec danger" type="submit">Удалить</button>
+      </form>{% endif %}
+    </div>
+  </article>
+{% empty %}
+  <p class="muted">Наблюдений нет.</p>
+{% endfor %}
+</div>
+{% include "pagination.html" %}
+</div>
+{% endblock %}

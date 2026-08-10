@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Мои отчёты{% endblock %}
+{% block content %}
+<h2>Мои отчёты <a class="btn" href="{% url 'report_create' %}">+ Новый отчёт</a></h2>
+<div class="card">
+<table><tr><th>Создан</th><th>Территория</th><th>Период</th><th>Формат</th><th>Состояние</th><th></th></tr>
+{% for r in reports %}
+<tr><td>{{ r.created_at|date:"d.m.Y H:i" }}</td>
+<td>{{ r.station|default:"весь регион" }}</td>
+<td>{{ r.date_from|date:"d.m.Y" }} — {{ r.date_to|date:"d.m.Y" }}</td>
+<td>{{ r.get_fmt_display }}</td><td>{{ r.get_state_display }}</td>
+<td>{% if r.state == "ready" %}<a class="btn" href="{{ r.file.url }}">Скачать</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">Отчётов нет.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

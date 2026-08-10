@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}{{ st.name }}{% endblock %}
+{% block content %}
+<h2>Точка наблюдения «{{ st.name }}»</h2>
+<div class="card">
+  <p>Координаты: {{ st.latitude }}, {{ st.longitude }}{% if st.height %}; высота {{ st.height }} м{% endif %}.
+  {% if st.description %}<br>{{ st.description }}{% endif %}
+  {% if st.equipment %}<br>Оборудование: {{ st.equipment }}{% endif %}</p>
+  {% if summary %}<p class="muted">Подтверждённых наблюдений: {{ summary.count }};
+  температура мин/сред/макс: {{ summary.t_min }} / {{ summary.t_avg }} / {{ summary.t_max }} °C.</p>{% endif %}
+  {% if not st.is_public %}<p class="msg info">Точка непубличная — страница видна только владельцу.</p>{% endif %}
+</div>
+<div class="card">
+<h3>История наблюдений</h3>
+<table><tr><th>Дата и время</th><th>t,°C</th><th>P,гПа</th><th>Ветер,м/с</th><th>Осадки</th><th>Облачность,%</th></tr>
+{% for o in page %}
+<tr><td>{{ o.observed_at|date:"d.m.Y H:i" }}</td><td>{{ o.temperature }}</td>
+<td>{{ o.pressure }}</td><td>{{ o.wind_speed }} {{ o.wind_direction }}</td>
+<td>{{ o.precipitation_type }} {{ o.precipitation_amount }} мм</td><td>{{ o.cloudiness }}</td></tr>
+{% empty %}<tr><td colspan="6">Подтверждённых наблюдений пока нет.</td></tr>{% endfor %}
+</table>
+{% include "pagination.html" %}
+</div>
+{% endblock %}

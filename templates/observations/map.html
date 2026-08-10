@@ -1,0 +1,657 @@
+{% extends "base.html" %}{% load static %}{% block title %}Карта наблюдений{% endblock %}
+{% block content %}
+<h2>Карта метеонаблюдений</h2>
+
+<div class="card">
+  <div class="filters">
+    <div><label>С даты</label><input type="date" id="f-from"></div>
+    <div><label>По дату</label><input type="date" id="f-to"></div>
+    <div id="f-precip-wrap"><label>Тип осадков</label><select id="f-precip"><option value="">Любой</option>
+      {% for p in precip_types %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</select></div>
+    <div id="f-phen-wrap"><label>Явление</label><select id="f-phen"><option value="">Любое</option>
+      {% for p in phenomena %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</select></div>
+    <div id="f-allergen-wrap" hidden><label>Аллерген</label><select id="f-allergen"><option value="">Любой</option></select></div>
+    <div><label>t от, °C</label><input type="number" id="f-tmin" step="0.1" style="width:90px"></div>
+    <div><label>t до, °C</label><input type="number" id="f-tmax" step="0.1" style="width:90px"></div>
+    <div><label style="display:inline"><input type="checkbox" id="f-photo" style="width:auto"> с фото</label></div>
+    <div><button id="f-apply">Применить</button></div>
+  </div>
+</div>
+
+<div class="card map-card">
+  <div id="map"></div>
+  <p class="muted" id="map-fallback" style="display:none">Карта временно недоступна —
+  данные доступны в сводке ниже и в отчётах.</p>
+  <div id="timeline" class="tl-row" style="display:none">
+    <button id="tl-play" class="sec" title="Проиграть месяц">▶</button>
+    <input type="range" id="tl-range" min="0" value="0">
+    <b id="tl-label" style="min-width:86px;text-align:right">сейчас</b>
+  </div>
+</div>
+
+{% if weather_warnings %}
+<div class="panel"><h3>Погодные предупреждения (за сутки, по данным наблюдателей)</h3>
+  <div class="alerts">
+    {% for w in weather_warnings %}
+    <div class="alert {{ w.level }}">
+      <span class="alert-ico">{% if w.kind == "allergy" %}<img src="{% static 'img/sneeze-64.png' %}" alt="" width="20" height="20">{% elif w.level == "danger" %}⛔{% elif w.level == "warn" %}⚠️{% else %}🌧️{% endif %}</span>
+      <div><b>{{ w.station.name }}</b><br>{{ w.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="panel chart-card"><h3>Сводка по выборке</h3>
+  <div id="summary" class="chips"><span class="muted">Нет данных.</span></div></div>
+
+<div class="charts-grid">
+  <div class="panel chart-card"><h3>Осадки по дням, мм</h3>
+    <div class="ch" style="height:230px;max-width:420px"><canvas id="chart-precip"></canvas></div></div>
+  <div class="panel chart-card"><h3>Температура воды, °C</h3>
+    <div class="ch" style="height:230px;max-width:420px"><canvas id="chart-water"></canvas></div>
+    <p class="muted" style="text-align:center;margin:8px 0 0">Средняя по прибрежным и
+    островным точкам выборки.</p></div>
+  <div class="panel chart-card"><h3>Роза ветров по выборке</h3>
+    <div class="ch" style="height:230px;max-width:300px"><canvas id="chart-windrose"></canvas></div>
+    <p class="muted" style="text-align:center;margin:8px 0 0">Чем больше сектор — тем чаще
+    ветер с этой стороны; насыщенность — средняя скорость.</p></div>
+</div>
+<div id="cht"></div>
+<div class="panel"><h3>Живая карта осадков и ветра (Windy)</h3>
+  <details id="windy-box">
+    <summary class="btn sec" style="display:inline-block;cursor:pointer;list-style:none">
+      Показать карту Windy</summary>
+    <div style="margin-top:12px">
+      <iframe id="windy-frame" title="Карта осадков Windy" width="100%" height="440"
+        style="border:0;border-radius:14px" loading="lazy"
+        data-src="https://embed.windy.com/embed2.html?lat=61.5&lon=74.0&detailLat=61.5&detailLon=74.0&zoom=3&level=surface&overlay=rain&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&metricWind=m%2Fs&metricTemp=%C2%B0C"></iframe>
+      <p class="muted" style="margin-top:6px">Анимированные осадки, ветер и облачность —
+      сервис Windy.com; слой меняется в меню справа внутри карты.</p>
+    </div>
+  </details>
+  {# Иконка аллергонаблюдений: Sneeze icons by Victoruler — Flaticon (flaticon.com/free-icons/sneeze) #}
+</div>
+{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{% static 'vendor/markercluster/MarkerCluster.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/markercluster/MarkerCluster.Default.css' %}">
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
+<script src="{% static 'vendor/markercluster/leaflet.markercluster.js' %}"></script>
+<script src="{% static 'vendor/leaflet/leaflet-heat.js' %}"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
+<style>
+.map-card{position:relative}
+#map{height:560px}
+/* Машина времени: ползунок проигрывания дней */
+.tl-row{display:flex;gap:14px;align-items:center;margin-top:14px}
+.tl-row input[type=range]{flex:1;max-width:none;accent-color:var(--b);padding:0;border:0}
+.tl-row button{padding:7px 13px}
+/* Температурный маркер: цветной бейдж со значением */
+.tmark{min-width:40px;padding:4px 6px;border-radius:999px;color:#fff;
+  font:700 12.5px/1 system-ui,'Segoe UI',Arial,sans-serif;text-align:center;
+  border:2px solid #fff;box-shadow:0 2px 8px rgba(15,28,38,.35)}
+/* Анонимное наблюдение: серый маркер со значком вместо цвета температуры */
+.tmark.allergy{display:flex;align-items:center;gap:4px;padding:0 7px;width:auto}
+.tmark.allergy img{width:16px;height:16px}
+.wx-pop-allergy{display:flex;align-items:center;gap:8px;margin-top:8px;
+  padding:7px 10px;border-radius:9px;background:var(--soft);font-size:12.5px}
+.wx-pop-allergy img{width:20px;height:20px;flex:none}
+.map-credit{font-size:11px;opacity:.65;margin:10px 0 0}
+.map-credit a{color:inherit;text-decoration:underline}
+.tmark.anon{background:#5b6470;border-style:dashed;display:flex;
+  align-items:center;justify-content:center;gap:4px}
+.tmark.anon img{width:14px;height:14px;filter:invert(1)}
+/* На телефоне маркеры крупноваты и закрывают карту — делаем компактнее */
+@media(max-width:700px){
+  .tmark{min-width:32px;padding:2px 5px;font-size:11px;border-width:1.5px}
+  .tmark.allergy{padding:0 5px;gap:3px}
+  .tmark.allergy img{width:13px;height:13px}
+  .tmark.anon img{width:12px;height:12px}
+  /* переключатель слоёв и фильтры Leaflet — компактнее */
+  .leaflet-control-layers{font-size:12px;padding:6px 8px}
+  .leaflet-control-layers label{margin:2px 0}
+}
+.wx-pop-anon{margin-top:8px;padding:6px 9px;border-radius:9px;background:#f1f3f6;
+  color:#4d5866;font-size:11.5px;display:flex;align-items:center;gap:7px}
+.wx-pop-anon img{width:15px;height:15px;opacity:.7}
+/* Попап точки: аккуратная погодная карточка */
+.leaflet-popup-content-wrapper{border-radius:14px;box-shadow:var(--shadow)}
+.leaflet-popup-content{margin:14px 16px}
+.wx-pop{font:13px/1.45 system-ui,'Segoe UI',Arial,sans-serif;min-width:230px}
+.wx-pop-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.wx-pop-ico{font-size:28px}
+.wx-pop-name{font-weight:700;font-size:14px;color:#0f1c26}
+.wx-pop-time{font-size:11.5px;color:#5f7385}
+.wx-pop-temp{margin-left:auto;font-size:24px;font-weight:800;color:var(--b2)}
+.wx-pop-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;
+  padding:9px 0;border-top:1px solid #e6ecf2;border-bottom:1px solid #e6ecf2;color:#31424f}
+.wx-pop-grid span{margin-right:5px}
+.wx-pop-link{display:inline-block;margin-top:9px;font-weight:600;color:var(--b);text-decoration:none}
+.wx-pop-link:hover{color:var(--b2)}
+</style>
+<script defer>
+document.addEventListener("DOMContentLoaded", () => {
+  let map, layer, allergyLayer;
+  try {
+    map = L.map("map").setView([61.5, 74.0], 3);   // обзор всей России
+    map.attributionControl.setPrefix(
+      '<a href="https://leafletjs.com">Leaflet</a>');  // стандартная подпись без флага
+    // Подложка: 2ГИС — русские подписи, сервера в России, быстрая загрузка.
+    // При недоступности тихо переключаемся на CARTO (подписи латиницей),
+    // затем на зеркало OSM.
+    const BASE_URLS = [
+      { url: "https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1",
+        opts: { attribution: "© 2ГИС", subdomains: "0123", maxZoom: 18 } },
+      { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        opts: { attribution: "© OpenStreetMap, © CARTO", subdomains: "abcd" } },
+      { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
+        opts: { attribution: "© OpenStreetMap", maxZoom: 19 } },
+    ];
+    let baseIdx = 0, baseTiles = null, baseErr = 0;
+    function useBase(i) {
+      if (baseTiles) map.removeLayer(baseTiles);
+      baseErr = 0;
+      baseTiles = L.tileLayer(BASE_URLS[i].url, BASE_URLS[i].opts);
+      baseTiles.on("tileerror", () => {
+        if (++baseErr >= 3) {
+          if (baseIdx + 1 < BASE_URLS.length) useBase(++baseIdx);
+          else document.getElementById("map-fallback").style.display = "block";
+        }
+      });
+      baseTiles.addTo(map);
+      baseTiles.bringToBack();
+    }
+    useBase(0);
+    layer = (window.L && L.markerClusterGroup) ? L.markerClusterGroup() : L.layerGroup();
+    layer.addTo(map);
+    // Аллергонаблюдения — отдельный слой. Он и «погодные» (обычные +
+    // экспресс-замеры) переключаются взаимоисключающими радио-кнопками ниже,
+    // поэтому пыльцевые и погодные метки не накладываются друг на друга.
+    // По умолчанию показываем погодные, аллергослой пока не на карте.
+    allergyLayer = L.layerGroup();
+    // Слой осадков OpenWeatherMap: подключается, если в settings.py задан
+    // OWM_API_KEY (см. комментарий там). Показывает дождь и снег по всей
+    // России и миру. Ключ бесплатный: home.openweathermap.org/api_keys
+    // Тепловая карта температуры: градиент от холодного к тёплому по
+    // последним замерам точек; включается галочкой в переключателе слоёв
+    window.heat = (L.heatLayer ? L.heatLayer([], { radius: 45, blur: 30,
+      minOpacity: .35, maxZoom: 8,
+      gradient: { 0: "#312e81", .25: "#2563eb", .5: "#10b981",
+                  .7: "#f59e0b", 1: "#ef4444" } }) : null);
+
+    const OWM_KEY = "{{ owm_key|escapejs }}";
+    if (OWM_KEY) {
+      // Отдельная панель поверх базовых тайлов: что бы ни происходило с
+      // подложкой (переключение CARTO/OSM), погодные слои всегда сверху
+      map.createPane("weather");
+      map.getPane("weather").style.zIndex = 350;
+      map.getPane("weather").style.pointerEvents = "none";
+      // Родные тайлы OWM очень бледные — усиливаем насыщенность и контраст,
+      // чтобы облачность и осадки были хорошо видны на светлой подложке.
+      // Если покажется слишком ярко, уменьшите числа ниже.
+      map.getPane("weather").style.filter =
+        "saturate(2.8) contrast(2.1) brightness(.92)";
+      const owmUrl = kind =>
+        "https://tile.openweathermap.org/map/" + kind + "_new/{z}/{x}/{y}.png?appid=" + OWM_KEY;
+      // updateWhenIdle + keepBuffer: тайлы запрашиваются после остановки
+      // карты и меньшими пачками — меньше одновременных запросов к OWM
+      const wxOpts = { pane: "weather", opacity: 1,
+        keepBuffer: 1, attribution: "погодные слои © OpenWeatherMap" };
+      const precip = L.tileLayer(owmUrl("precipitation"), wxOpts);
+      const clouds = L.tileLayer(owmUrl("clouds"), wxOpts);
+      // Собственный индикатор «идёт загрузка слоя»: браузерная строка
+      // состояния не всегда показывает передачу тайлов (особенно когда они
+      // приходят из кэша), поэтому статус рисуем сами по событиям Leaflet
+      const wxBadge = document.createElement("div");
+      wxBadge.textContent = "Загрузка слоя погоды…";
+      wxBadge.style.cssText = "position:absolute;left:12px;bottom:12px;z-index:800;" +
+        "padding:6px 12px;border-radius:10px;font-size:12.5px;display:none;" +
+        "background:var(--card);border:1px solid var(--glass-line);color:var(--tx);" +
+        "backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)";
+      document.getElementById("map").appendChild(wxBadge);
+      let wxLoading = 0;
+      const wxShow = () => { wxLoading++; wxBadge.style.display = "block"; };
+      const wxHide = () => { if (--wxLoading <= 0) { wxLoading = 0; wxBadge.style.display = "none"; } };
+      for (const lyr of [precip, clouds]) {
+        lyr.on("loading", wxShow);
+        lyr.on("load", wxHide);
+      }
+      // Слои погоды НЕ включаются при старте: тайлы OWM медленные, и страница
+      // «висела» в загрузке. Вместо этого запоминаем выбор пользователя:
+      // включил галочку один раз — при следующих заходах слой вернётся сам.
+      const wxSaved = localStorage.getItem("wx-layers");
+      if (wxSaved) {
+        if (wxSaved.includes("precip")) precip.addTo(map);
+        if (wxSaved.includes("clouds")) clouds.addTo(map);
+      }
+      const saveWx = () => localStorage.setItem("wx-layers",
+        [map.hasLayer(precip) && "precip", map.hasLayer(clouds) && "clouds"]
+          .filter(Boolean).join(","));
+      map.on("overlayadd overlayremove", saveWx);
+      // Радио-слои (baseLayers): можно включить ЛИБО погодные наблюдения,
+      // ЛИБО аллергонаблюдения — Leaflet сам гарантирует, что активен только
+      // один, поэтому метки никогда не смешиваются. Этот контрол отдельный и
+      // не удаляется, даже если слой OWM отвалится.
+      const nablLayers = { "Погодные наблюдения": layer,
+                           "Аллергонаблюдения": allergyLayer };
+      L.control.layers(nablLayers, null,
+        { collapsed: false, position: "topright" }).addTo(map);
+      // Фильтры «Тип осадков» и «Явление» относятся только к погодным
+      // наблюдениям — у аллергонаблюдений таких полей нет вовсе, поэтому на
+      // слое аллергии их прячем. Фильтр аллергена — наоборот, только для
+      // аллергослоя.
+      const allergenWrap = document.getElementById("f-allergen-wrap");
+      const precipWrap = document.getElementById("f-precip-wrap");
+      const phenWrap = document.getElementById("f-phen-wrap");
+      map.on("baselayerchange", (e) => {
+        const isAllergy = e.layer === allergyLayer;
+        const sel = document.getElementById("f-allergen");
+        // показываем фильтр аллергена только для слоя аллергии и только если
+        // в выборке действительно есть аллергены (иначе селект был бы пустым)
+        const hasAllergens = sel && sel.options.length > 1;
+        if (allergenWrap) allergenWrap.hidden = !(isAllergy && hasAllergens);
+        if (!isAllergy && sel) sel.value = "";
+        if (precipWrap) precipWrap.hidden = isAllergy;
+        if (phenWrap) phenWrap.hidden = isAllergy;
+        if (isAllergy) {
+          const fp = document.getElementById("f-precip"), fh = document.getElementById("f-phen");
+          if (fp) fp.value = ""; if (fh) fh.value = "";
+        }
+        drawMarkers(window.__cutoffDay || null);
+      });
+      // Накладываемые слои-подложки (осадки/облачность/тепловая карта) — свой
+      // контрол: если OWM не работает, снимем именно его, не трогая метки.
+      const overlays = { "Осадки": precip, "Облачность": clouds };
+      if (window.heat) overlays["Тепловая карта t°"] = window.heat;
+      const owmCtl = L.control.layers(null, overlays,
+                       { collapsed: false, position: "topright" }).addTo(map);
+      // Если ключ не активирован или тайлы блокируются — убираем слой и
+      // переключатель, чтобы не висели нерабочие галочки
+      let owmErr = 0;
+      setInterval(() => { owmErr = Math.max(0, owmErr - 2); }, 5000);
+      const owmFail = () => {
+        if (++owmErr >= 25) {
+          map.removeLayer(precip); map.removeLayer(clouds); owmCtl.remove();
+          console.warn("Слой OpenWeatherMap отключён: тайлы не загружаются " +
+                       "(вероятно, ключ ещё не активирован — код 401 в Network)");
+        }
+      };
+      precip.on("tileerror", owmFail);
+      clouds.on("tileerror", owmFail);
+      // Как в Яндекс.Погоде: при включённом погодном слое подложка
+      // обесцвечивается и высветляется — осадки и облака резко заметнее
+      let wxOn = (map.hasLayer(precip) ? 1 : 0) + (map.hasLayer(clouds) ? 1 : 0);
+      const dimBase = () => {
+        map.getPane("tilePane").style.filter = wxOn > 0
+          ? "grayscale(.75) brightness(1.12) contrast(.92)" : "";
+      };
+      dimBase();
+      map.on("overlayadd", (e) => {
+        if (e.layer === precip || e.layer === clouds) { wxOn++; dimBase(); }
+      });
+      map.on("overlayremove", (e) => {
+        if (e.layer === precip || e.layer === clouds) { wxOn--; dimBase(); }
+      });
+    }
+  } catch (e) {
+    document.getElementById("map").style.display = "none";
+    document.getElementById("map-fallback").style.display = "block";
+  }
+
+  const f1 = x => Number(x).toFixed(1);
+
+  // ================== Маркеры, тепло и машина времени ==================
+  let gObs = [];                                     // наблюдения текущей выборки
+  const RU_DIR = { N:"С", NNE:"ССВ", NE:"СВ", ENE:"ВСВ", E:"В", ESE:"ВЮВ",
+    SE:"ЮВ", SSE:"ЮЮВ", S:"Ю", SSW:"ЮЮЗ", SW:"ЮЗ", WSW:"ЗЮЗ",
+    W:"З", WNW:"ЗСЗ", NW:"СЗ", NNW:"ССЗ" };
+  const wIco = o => Number(o.precip_amount) > 0
+    ? (Number(o.temperature) <= 0 ? "🌨" : "🌧")
+    : (o.cloudiness >= 75 ? "☁️" : o.cloudiness >= 30 ? "⛅" : "☀️");
+  // Цвет маркера по температуре: −30 °C (синий) … +30 °C (красный)
+  const tColor = t => {
+    const k = Math.max(0, Math.min(1, (Number(t) + 30) / 60));
+    return `hsl(${Math.round(225 - 225 * k)},78%,${Math.round(52 - 8 * k)}%)`;
+  };
+  const ANON_IMG = "{% static 'img/anon-48.png' %}";
+  const ALLERGY_IMG = "{% static 'img/sneeze-64.png' %}";
+  // Уровни пыльцы — свой цвет маркера; у аллергонаблюдения температуры может
+  // не быть вовсе, поэтому вместо градуса показываем иконку и уровень
+  const POLLEN_COLOR = { "Низкий": "#6b8e3e", "Средний": "#d9a13c",
+                         "Высокий": "#d9702e", "Очень высокий": "#c9554a" };
+  const tIcon = (t, anon) => L.divIcon({ className: "",
+    html: `<div class="tmark${anon ? " anon" : ""}"${anon ? "" :
+            ` style="background:${tColor(t)}"`}>` +
+          (anon ? `<img src="${ANON_IMG}" alt="аноним">` : "") +
+          `${t > 0 ? "+" : ""}${Math.round(t)}°</div>`,
+    iconSize: [44, 30], iconAnchor: [22, 15], popupAnchor: [0, -14] });
+  const aIcon = (o) => L.divIcon({ className: "",
+    html: `<div class="tmark allergy" style="background:${
+            POLLEN_COLOR[o.pollen] || "#8a8b90"}">` +
+          `<img src="${ALLERGY_IMG}" alt="аллергия">` +
+          `${o.temperature != null ? (o.temperature > 0 ? "+" : "") +
+             Math.round(o.temperature) + "°" : "пыльца"}</div>`,
+    iconSize: [56, 30], iconAnchor: [28, 15], popupAnchor: [0, -14] });
+
+  // Рисует по одному маркеру на точку: последний замер не позже cutoffDay
+  // (null = «сейчас», т.е. вся выборка). Тепловая карта обновляется вместе.
+  function drawMarkers(cutoffDay) {
+    if (!layer) return;
+    window.__cutoffDay = cutoffDay;
+    layer.clearLayers();
+    if (allergyLayer) allergyLayer.clearLayers();
+    const obs = cutoffDay
+      ? gObs.filter(o => o.observed_at.slice(0, 10) <= cutoffDay) : gObs;
+    // Фильтр по аллергену (действует только на аллергослой)
+    const allergenSel = document.getElementById("f-allergen");
+    const allergenFilter = allergenSel ? allergenSel.value : "";
+    // Группируем отдельно: обычные замеры и аллергонаблюдения. Иначе
+    // аллергометка терялась бы, если у той же точки есть более свежий
+    // обычный замер (на точку рисуется один маркер каждого вида).
+    const byStation = new Map(), byStationAllergy = new Map();
+    for (const o of obs) {
+      // при активном фильтре аллергена пропускаем несовпадающие аллергозамеры
+      if (o.obs_type === "allergy" && allergenFilter && o.allergen !== allergenFilter)
+        continue;
+      const m = o.obs_type === "allergy" ? byStationAllergy : byStation;
+      const s = m.get(o.station_id);
+      if (!s) m.set(o.station_id, { latest: o, count: 1 });
+      else { s.count++; if (o.observed_at > s.latest.observed_at) s.latest = o; }
+    }
+    for (const { latest: o, count } of [...byStation.values(),
+                                        ...byStationAllergy.values()]) {
+      const sign = o.temperature > 0 ? "+" : "";
+      const isAllergy = o.obs_type === "allergy";
+      // аллергонаблюдения — в отдельный слой (как анонимные, но управляемый
+      // галочкой в переключателе слоёв)
+      const target = isAllergy ? allergyLayer : layer;
+      L.marker([o.lat, o.lon], { icon: isAllergy ? aIcon(o) : tIcon(o.temperature, o.anon) })
+        .addTo(target).bindPopup(`
+        <div class="wx-pop">
+          <div class="wx-pop-head">
+            <span class="wx-pop-ico">${wIco(o)}</span>
+            <div>
+              <div class="wx-pop-name">${o.station}</div>
+              <div class="wx-pop-time">${new Date(o.observed_at).toLocaleString("ru",
+                {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+                · наблюдений: ${count}</div>
+            </div>
+            <div class="wx-pop-temp">${o.temperature != null
+              ? sign + f1(o.temperature) + "°" : ""}</div>
+          </div>
+          ${isAllergy ? `<div class="wx-pop-allergy">
+            <img src="${ALLERGY_IMG}" alt="">
+            <span>Пыльца: <b>${o.pollen || "—"}</b>${o.allergen ? " · " + o.allergen : ""}</span>
+          </div>` : ""}
+          <div class="wx-pop-grid">
+            ${o.wind != null ? `<div><span>💨</span>${f1(o.wind)} м/с${o.wind_dir ? " · " + (RU_DIR[o.wind_dir] || o.wind_dir) : ""}</div>` : ""}
+            ${o.pressure != null ? `<div><span>🌡</span>${f1(o.pressure)} гПа</div>` : ""}
+            ${o.precip ? `<div><span>💧</span>${Number(o.precip_amount) > 0
+              ? o.precip + ", " + f1(o.precip_amount) + " мм" : "без осадков"}</div>` : ""}
+            ${o.cloudiness != null ? `<div><span>☁️</span>${o.cloudiness}%</div>` : ""}
+            ${o.water_temp != null ? `<div><span>🌊</span>вода ${f1(o.water_temp)} °C</div>` : ""}
+            ${o.loc === "island" && o.wind != null ? `<div><span>⛵</span>${f1(o.wind * 1.9438)} уз</div>` : ""}
+          </div>
+          ${o.anon ? `<div class="wx-pop-anon"><img src="${ANON_IMG}" alt="">
+            анонимное наблюдение (проверено модератором)</div>` : ""}
+          <a class="wx-pop-link" href="/stations/${o.station_id}/page/">Страница точки →</a>
+        </div>`, { maxWidth: 300 });
+    }
+    if (window.heat) {
+      window.heat.setLatLngs([...byStation.values()]
+        .filter(({ latest: o }) => o.temperature != null)
+        .map(({ latest: o }) =>
+          [o.lat, o.lon, Math.max(.08, (Number(o.temperature) + 30) / 60)]));
+    }
+  }
+
+  // «Машина времени»: ползунок проигрывает дни выборки, ▶ — автопроигрывание
+  let tlDays = [], tlTimer = null;
+  const tlRange = document.getElementById("tl-range");
+  const tlLabel = document.getElementById("tl-label");
+  const tlPlay = document.getElementById("tl-play");
+  function initTimeline() {
+    tlDays = [...new Set(gObs.map(o => o.observed_at.slice(0, 10)))].sort();
+    const box = document.getElementById("timeline");
+    if (tlDays.length < 2) { box.style.display = "none"; return; }
+    box.style.display = "flex";
+    tlRange.max = tlDays.length;                     // последняя позиция = «сейчас»
+    tlRange.value = tlDays.length;
+    tlLabel.textContent = "сейчас";
+  }
+  function tlApply() {
+    const i = Number(tlRange.value);
+    if (i >= tlDays.length) { tlLabel.textContent = "сейчас"; drawMarkers(null); }
+    else {
+      const d = tlDays[i];
+      tlLabel.textContent = d.slice(8, 10) + "." + d.slice(5, 7);
+      drawMarkers(d);
+    }
+  }
+  function tlStop() {
+    if (tlTimer) { clearInterval(tlTimer); tlTimer = null; tlPlay.textContent = "▶"; }
+  }
+  tlRange.addEventListener("input", () => { tlStop(); tlApply(); });
+  tlPlay.addEventListener("click", () => {
+    if (tlTimer) { tlStop(); return; }
+    if (Number(tlRange.value) >= tlDays.length) tlRange.value = 0;
+    tlPlay.textContent = "⏸";
+    tlApply();
+    tlTimer = setInterval(() => {
+      tlRange.value = Number(tlRange.value) + 1;
+      tlApply();
+      if (Number(tlRange.value) >= tlDays.length) tlStop();
+    }, 650);
+  });
+
+  // Наполняет фильтр только теми аллергенами, которые реально есть в текущей
+  // выборке на карте (в справочнике их больше, но показывать пустые варианты
+  // бессмысленно). Рядом с названием — сколько наблюдений по нему.
+  function updateAllergenFilter() {
+    const sel = document.getElementById("f-allergen");
+    if (!sel) return;
+    const counts = new Map();
+    for (const o of gObs) {
+      if (o.obs_type !== "allergy" || !o.allergen) continue;
+      counts.set(o.allergen, (counts.get(o.allergen) || 0) + 1);
+    }
+    const prev = sel.value;                       // сохраняем выбор пользователя
+    const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+    sel.innerHTML = `<option value="">Любой</option>` + names.map(n =>
+      `<option value="${n}">${n} (${counts.get(n)})</option>`).join("");
+    // если выбранного аллергена в новой выборке нет — сбрасываем на «Любой»
+    sel.value = names.includes(prev) ? prev : "";
+    // фильтр виден, только если активен слой аллергии И есть что фильтровать
+    const wrap = document.getElementById("f-allergen-wrap");
+    if (wrap) {
+      const layerOn = allergyLayer && map && map.hasLayer(allergyLayer);
+      wrap.hidden = !(layerOn && names.length);
+    }
+  }
+
+  async function load() {
+    const q = new URLSearchParams();
+    const v = id => document.getElementById(id).value;
+    if (v("f-from")) q.set("date_from", v("f-from"));
+    if (v("f-to")) q.set("date_to", v("f-to"));
+    if (v("f-precip")) q.set("precip", v("f-precip"));
+    if (v("f-phen")) q.set("phenomenon", v("f-phen"));
+    if (v("f-tmin")) q.set("t_min", v("f-tmin"));
+    if (v("f-tmax")) q.set("t_max", v("f-tmax"));
+    if (document.getElementById("f-photo").checked) q.set("with_photo", "1");
+    const r = await fetch("{% url 'api_map_data' %}?" + q);
+    const data = await r.json();
+
+    gObs = data.observations;
+    updateAllergenFilter();
+    initTimeline();
+    drawMarkers(null);
+
+    const s = data.summary, el = document.getElementById("summary");
+    el.innerHTML = s
+      ? `<div class="chip"><b>${s.count}</b><span>наблюдений</span></div>` +
+        `<div class="chip"><b>${f1(s.t_min)} °C</b><span>температура, мин</span></div>` +
+        `<div class="chip"><b>${f1(s.t_avg)} °C</b><span>температура, средняя</span></div>` +
+        `<div class="chip"><b>${f1(s.t_max)} °C</b><span>температура, макс</span></div>` +
+        `<div class="chip"><b>${f1(s.p_avg)}</b><span>давление, гПа</span></div>` +
+        `<div class="chip"><b>${f1(s.precip_sum)} мм</b><span>осадки суммарно</span></div>`
+      : '<span class="muted">По заданным фильтрам данных нет.</span>';
+    drawCharts(data);
+  }
+
+
+  // --- Графики по выборке ---
+  let chartWater = null, chartPr = null, chartWR = null;
+  const css = getComputedStyle(document.documentElement);
+  // Небесный голубой для «воды» и «осадков» — из переменной темы
+  const BLUE = css.getPropertyValue("--ch-sky").trim() || "#2f9fe0";
+  const tint = a => {
+    const n = parseInt(BLUE.slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  };
+  const GRID = css.getPropertyValue("--grid").trim() || "#e9ecf4",
+        MUT = css.getPropertyValue("--mut").trim() || "#697089";
+  if (typeof Chart !== "undefined") {
+    Chart.defaults.font.family = "system-ui, 'Segoe UI', Arial, sans-serif";
+    Chart.defaults.color = MUT;
+    Chart.defaults.maintainAspectRatio = false;
+  }
+  // Кастомный HTML-тултип (общий стиль с дашбордом)
+  const chtEl = document.getElementById("cht");
+  function htmlTooltip(ctx) {
+    const t = ctx.tooltip;
+    if (!chtEl || !t || t.opacity === 0) { if (chtEl) chtEl.style.opacity = 0; return; }
+    const title = t.title && t.title.length ? `<b>${t.title[0]}</b><br>` : "";
+    chtEl.innerHTML = title + t.body.map((b, i) => {
+      const c = t.labelColors[i] || {};
+      return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;` +
+             `background:${c.borderColor || c.backgroundColor || "#888"};margin-right:6px"></span>` +
+             b.lines.join(" ");
+    }).join("<br>");
+    const r = ctx.chart.canvas.getBoundingClientRect();
+    chtEl.style.left = (r.left + window.scrollX + t.caretX + 14) + "px";
+    chtEl.style.top = (r.top + window.scrollY + t.caretY - 10) + "px";
+    chtEl.style.opacity = 1;
+  }
+  const noTip = { enabled: false, external: htmlTooltip };
+
+  // Роза ветров: цвет берётся из палитры сайта (--b / --b2) —
+  // при смене темы или гаммы перекрашивается автоматически.
+  const roseHex = (css.getPropertyValue("--ch-rose").trim()
+                   || css.getPropertyValue("--b").trim() || "#232426"),
+        ROSE_D = roseTintD();
+  function roseTintD() {          // кромка секторов: тот же графит, чуть плотнее
+    const n = parseInt((css.getPropertyValue("--ch-rose").trim() || "#232426").slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},.85)`;
+  }
+  const roseN = parseInt(roseHex.slice(1), 16);
+  const roseTint = a => `rgba(${roseN >> 16 & 255},${roseN >> 8 & 255},${roseN & 255},${a})`;
+  const RUMBS = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                 "S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const RU_RUMBS = { N:"С", NNE:"ССВ", NE:"СВ", ENE:"ВСВ", E:"В", ESE:"ВЮВ",
+                     SE:"ЮВ", SSE:"ЮЮВ", S:"Ю", SSW:"ЮЮЗ", SW:"ЮЗ", WSW:"ЗЮЗ",
+                     W:"З", WNW:"ЗСЗ", NW:"СЗ", NNW:"ССЗ" };
+  function drawWindRose(observations) {
+    const counts = Object.fromEntries(RUMBS.map(r => [r, 0]));
+    const speeds = Object.fromEntries(RUMBS.map(r => [r, 0]));
+    for (const o of observations)
+      if (o.wind_dir && counts.hasOwnProperty(o.wind_dir)) {
+        counts[o.wind_dir]++;
+        speeds[o.wind_dir] += Number(o.wind);
+      }
+    const vals = RUMBS.map(r => counts[r]);
+    const avg = RUMBS.map(r => counts[r] ? speeds[r] / counts[r] : 0);
+    const spdMax = Math.max(1, ...avg);
+    chartWR && chartWR.destroy();
+    // Chart.js рисует цифры радиальной шкалы вдоль оси startAngle, поэтому при
+    // повороте розы на -11.25° (чтобы сектор «С» смотрел строго на север)
+    // значения шли под наклоном. Штатные тики скрываем и рисуем их сами —
+    // ровно по вертикали от центра вверх.
+    const vertTicks = { id: "vt", afterDraw(c) {
+      const r = c.scales.r, ctx = c.ctx;
+      ctx.save();
+      ctx.font = "10px system-ui";
+      ctx.fillStyle = MUT;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (const t of r.ticks) {
+        if (!t.value) continue;                       // ноль в центре не подписываем
+        const y = r.yCenter - r.getDistanceFromCenterForValue(t.value);
+        ctx.fillText(String(t.value), r.xCenter, y);
+      }
+      ctx.restore();
+    }};
+    chartWR = new Chart(document.getElementById("chart-windrose"), {
+      type: "polarArea", plugins: [vertTicks],
+      data: { labels: RUMBS.map(r => RU_RUMBS[r]),
+        datasets: [{ data: vals,
+          // насыщенность сектора — средняя скорость ветра с этого румба
+          backgroundColor: avg.map(sp => roseTint((.18 + .62 * sp / spdMax).toFixed(2))),
+          borderColor: ROSE_D, borderWidth: 1 }]},
+      options: {
+        plugins: { legend: { display: false },
+          tooltip: { enabled: false, external: htmlTooltip,
+            callbacks: { label: ctx =>
+              `${ctx.raw} набл. · ср. ветер ${avg[ctx.dataIndex].toFixed(1)} м/с` } } },
+        scales: { r: { startAngle: -11.25,
+          grid: { circular: true, color: GRID },
+          ticks: { precision: 0, display: false },    // штатные наклонные — прячем
+          pointLabels: { display: true, centerPointLabels: true,
+                         font: { size: 11 }, color: MUT } } } }
+    });
+  }
+  function drawCharts(data) {
+    if (typeof Chart === "undefined") return;
+    drawWindRose(data.observations);
+    // Температура воды: среднее за день по замерам прибрежных/островных точек
+    const waterByDay = {};
+    for (const o of data.observations) {
+      if (o.water_temp == null) continue;
+      const d = o.observed_at.slice(0, 10);
+      (waterByDay[d] = waterByDay[d] || []).push(o.water_temp);
+    }
+    const wdays = Object.keys(waterByDay).sort().slice(-14);
+    chartWater && chartWater.destroy();
+    chartWater = new Chart(document.getElementById("chart-water"), {
+      type: "line",
+      data: { labels: wdays.map(d => d.slice(8, 10) + "." + d.slice(5, 7)),
+        datasets: [{ label: "°C",
+          data: wdays.map(d => waterByDay[d].reduce((a, b) => a + b, 0) / waterByDay[d].length),
+          tension: .35, borderColor: BLUE,
+          backgroundColor: (c) => {
+            const g = c.chart.ctx.createLinearGradient(0, 0, 0, 220);
+            g.addColorStop(0, tint(.3)); g.addColorStop(1, tint(0));
+            return g;
+          },
+          fill: true, borderWidth: 2, pointRadius: 2 }]},
+      options: { plugins: { legend: { display: false }, tooltip: noTip },
+        scales: { x: { grid: { display: false } }, y: { grid: { color: GRID } } } }
+    });
+    const days = Object.keys(data.daily_precip).sort().slice(-14);
+    chartPr && chartPr.destroy();
+    chartPr = new Chart(document.getElementById("chart-precip"), {
+      type: "bar",
+      data: { labels: days.map(d => d.slice(8, 10) + "." + d.slice(5, 7)),
+        datasets: [{ label: "мм", data: days.map(d => data.daily_precip[d]),
+                     backgroundColor: days.map(d => data.daily_precip[d] > 0
+                       ? tint(.6) : tint(.14)),
+                     borderRadius: 5, maxBarThickness: 22 }]},
+      options: { plugins: { legend: { display: false }, tooltip: noTip },
+        scales: { x: { grid: { display: false } }, y: { grid: { color: GRID } } } }
+    });
+  }
+  document.getElementById("f-apply").addEventListener("click", load);
+  // смена аллергена перерисовывает метки мгновенно (данные уже загружены)
+  const fAllergen = document.getElementById("f-allergen");
+  if (fAllergen) fAllergen.addEventListener("change",
+    () => drawMarkers(window.__cutoffDay || null));
+  // Windy подгружается только когда пользователь раскрыл блок
+  const wbox = document.getElementById("windy-box");
+  if (wbox) wbox.addEventListener("toggle", () => {
+    const fr = document.getElementById("windy-frame");
+    if (wbox.open && fr && !fr.src) fr.src = fr.dataset.src;
+  });
+  load();
+});
+</script>
+{% endblock %}

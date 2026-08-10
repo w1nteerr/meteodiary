@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Новый отчёт{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px">
+<h2>Формирование отчёта</h2>
+<form method="post">{% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for f in form.visible_fields %}<label>{{ f.label }}</label>{{ f }}{{ f.errors }}{% endfor %}
+  <p><button>Сформировать</button></p>
+  <p class="muted">Период — не более 1 года. Отчёт формируется в фоне; по готовности придёт
+  уведомление, файл появится в «Моих отчётах» и хранится 7 суток.</p>
+</form>
+</div>
+{% endblock %}

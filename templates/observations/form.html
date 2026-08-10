@@ -1,0 +1,112 @@
+{% extends "base.html" %}{% block title %}Наблюдение{% endblock %}
+{% block content %}
+<div class="card form-card">
+<h2>{% if rework %}Доработка наблюдения №{{ rework.pk }}{% else %}Новое наблюдение{% endif %}</h2>
+{% if rework and last_comment %}
+  <div class="msg info">Комментарий модератора: {{ last_comment.comment }}</div>
+{% endif %}
+<form method="post" enctype="multipart/form-data" id="obs-form">{% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for f in form.visible_fields %}
+    <div id="row-{{ f.name }}">
+      <label>{{ f.label }}</label>{{ f }}{{ f.errors }}
+      {% if f.help_text %}<div class="muted" style="font-size:12px">{{ f.help_text }}</div>{% endif %}
+    </div>
+  {% endfor %}
+  {% if not rework %}
+  <label>Фотографии (до 3, JPEG/PNG, ≤ 5 МБ каждая)</label>
+  <input type="file" name="photos" accept="image/jpeg,image/png" multiple>
+  {% endif %}
+  {% if weather_enabled %}
+  {# Подстановка текущей погоды из OpenWeatherMap: заполняет поля, но не отправляет форму — наблюдатель сверяет значения со своими приборами. #}
+  <p style="margin-top:6px">
+    <button type="button" class="sec" id="wx-prefill">Подставить текущую погоду</button>
+    <span id="wx-status" class="muted" style="font-size:12.5px;margin-left:8px"></span>
+  </p>
+  {% endif %}
+  <input type="hidden" name="client_uuid" id="client_uuid">
+  <p style="margin-top:12px">
+    <button type="submit">{% if rework %}Отправить повторно{% else %}Отправить{% endif %}</button>
+    {% if not rework %}<button type="button" class="sec" id="save-draft">Сохранить черновик (офлайн)</button>{% endif %}
+  </p>
+</form>
+{% include "observations/_obs_type_switch.html" %}
+{% if weather_enabled %}
+<script>
+// Кнопка «Подставить текущую погоду»: берёт данные OpenWeatherMap по координатам
+// выбранной точки и заполняет поля формы. Значения остаются редактируемыми.
+(function () {
+  const btn = document.getElementById("wx-prefill");
+  const out = document.getElementById("wx-status");
+  const stationSel = document.querySelector('select[name="station"]');
+  if (!btn || !stationSel) return;
+
+  const setVal = (name, value) => {
+    const el = document.querySelector('[name="' + name + '"]');
+    if (el && value !== null && value !== undefined && value !== "") el.value = value;
+  };
+
+  btn.addEventListener("click", async () => {
+    if (!stationSel.value) { out.textContent = "Сначала выберите точку."; return; }
+    btn.disabled = true; out.textContent = "Запрашиваем погоду…";
+    try {
+      const r = await fetch("/api/weather-prefill/?station=" + encodeURIComponent(stationSel.value));
+      const j = await r.json();
+      if (!j.ok) { out.textContent = j.error || "Не удалось получить погоду."; return; }
+      const d = j.data;
+      setVal("temperature", d.temperature);
+      setVal("pressure", d.pressure);
+      setVal("wind_speed", d.wind_speed);
+      setVal("cloudiness", d.cloudiness);
+      setVal("precipitation_amount", d.precipitation_amount);
+      if (d.wind_direction) setVal("wind_direction", d.wind_direction);
+      // упрощённые формы: переводим числа в категории
+      const wl = document.querySelector('[name="wind_level"]');
+      if (wl && d.wind_speed != null)
+        wl.value = d.wind_speed <= 3 ? "weak" : d.wind_speed <= 7 ? "moderate" : "strong";
+      const cl = document.querySelector('[name="cloud_level"]');
+      if (cl && d.cloudiness != null)
+        cl.value = d.cloudiness <= 20 ? "clear" : d.cloudiness <= 70 ? "partly" : "overcast";
+      out.textContent = "Заполнено по данным " + (d.source || "сервиса погоды")
+        + (d.description ? " · " + d.description : "")
+        + ". Проверьте значения перед отправкой.";
+    } catch (e) {
+      out.textContent = "Сеть недоступна — заполните вручную.";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+{% endif %}
+<script>
+// Температура воды доступна только для точек на побережье или острове
+(function () {
+  const LOC = JSON.parse('{{ stations_loc|default:"{}"|escapejs }}');
+  const sel = document.querySelector('select[name="station"]');
+  const row = document.getElementById("row-water_temperature");
+  if (!sel || !row) return;
+  function toggle() {
+    const typeSel = document.querySelector('select[name="obs_type"]');
+    const fullType = !typeSel || typeSel.value === "full";  // вода — только в полном
+    const t = LOC[sel.value];
+    const watery = fullType && (t === "coast" || t === "island");
+    row.style.display = watery ? "" : "none";
+    if (!watery) { const inp = row.querySelector("input"); if (inp) inp.value = ""; }
+  }
+  window.__waterToggle = toggle;
+  sel.addEventListener("change", toggle);
+  toggle();
+})();
+</script>
+{% if not rework %}
+<div class="card form-card" id="drafts-card" style="display:none">
+  <h3>Черновики на этом устройстве</h3>
+  <div id="drafts-list"></div>
+  <p class="muted">Черновики хранятся в браузере (IndexedDB, до 10 шт.). При появлении сети
+  нажмите «Отправить» — повторная отправка не создаёт дубликатов (client_uuid).</p>
+</div>
+<script src="/static/js/drafts.js" defer></script>
+{% endif %}
+</div>
+{% endblock %}

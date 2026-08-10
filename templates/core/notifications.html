@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Уведомления{% endblock %}
+{% block content %}
+<h2>Уведомления</h2>
+<div class="card">
+<table><tr><th>Когда</th><th>Тип</th><th>Текст</th></tr>
+{% for n in page %}
+<tr><td>{{ n.created_at|date:"d.m.Y H:i" }}</td><td>{{ n.get_ntype_display }}</td>
+<td>{% if n.link %}<a href="{{ n.link }}">{{ n.text }}</a>{% else %}{{ n.text }}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="3">Уведомлений нет.</td></tr>{% endfor %}
+</table>
+{% include "pagination.html" %}
+</div>
+{% endblock %}

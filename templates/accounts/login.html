@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="auth-hero">
+  <div class="auth-title">☀ Дневник синоптика</div>
+  <div class="auth-sub">Войдите, чтобы вести наблюдения</div>
+</div>
+<div class="card auth">
+<h2>Вход в систему</h2>
+{% if error %}<div class="msg error">{{ error }}</div>{% endif %}
+<form method="post">{% csrf_token %}
+  <label>Логин</label><input name="username" required autofocus>
+  <label>Пароль</label><input name="password" type="password" required>
+  <p><button type="submit">Войти</button></p>
+</form>
+{% if vk_auth_enabled %}
+<p><a class="btn sec" href="/auth/vk/login/">Войти через VK ID</a></p>
+{% endif %}
+<p class="muted"><a href="{% url 'password_reset' %}">Забыли пароль?</a> ·
+   <a href="{% url 'register' %}">Регистрация</a></p>
+</div>
+{% endblock %}

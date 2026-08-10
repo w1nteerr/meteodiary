@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}Модерация{% endblock %}
+{% block content %}
+<h2>Очередь модерации</h2>
+<div class="card">
+<div class="rows">
+{% for o in page %}
+  <article class="row-card">
+    <div class="row-main">
+      <div class="row-title">
+        {{ o.station }}
+        {% if o.is_anomaly %}<span class="badge rework">⚠ аномалия</span>{% endif %}
+        {% if o.resubmit_count %}<span class="badge draft">повтор №{{ o.resubmit_count }}</span>{% endif %}
+      </div>
+      <div class="row-meta">№{{ o.pk }} · {{ o.observed_at|date:"d.m.Y H:i" }} · {{ o.author.username }}</div>
+      <div class="row-facts">
+        {% if o.temperature is not None %}<span><b>{{ o.temperature }}</b> °C</span>{% endif %}
+        <span>{{ o.get_obs_type_display|lower }}</span>
+      </div>
+    </div>
+    <div class="row-actions">
+      <a class="btn" href="{% url 'moderation_detail' o.pk %}">Проверить</a>
+    </div>
+  </article>
+{% empty %}<p class="muted">Очередь пуста.</p>{% endfor %}
+</div>
+{% include "pagination.html" %}
+</div>
+{% endblock %}

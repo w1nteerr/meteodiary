@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block title %}Мои точки{% endblock %}
+{% block content %}
+<h2>Мои точки наблюдения <a class="btn" href="{% url 'station_create' %}">+ Новая точка</a></h2>
+<div class="card">
+<div class="rows">
+{% for st in stations %}
+  <article class="row-card">
+    <div class="row-main">
+      <div class="row-title">
+        {{ st.name }}
+        {% if st.is_public %}<span class="badge approved">публичная</span>{% endif %}
+        {% if not st.is_active %}<span class="badge draft">в архиве</span>{% endif %}
+      </div>
+      <div class="row-meta">{{ st.latitude }}, {{ st.longitude }}</div>
+    </div>
+    <div class="row-actions">
+      <a class="btn sec" href="{% url 'station_edit' st.pk %}">Изменить</a>
+      <form method="post" action="{% url 'station_archive' st.pk %}">{% csrf_token %}
+        <button class="sec">{{ st.is_active|yesno:"В архив,Из архива" }}</button></form>
+      <form method="post" action="{% url 'station_delete' st.pk %}"
+            onsubmit="return confirm('Удалить точку?')">{% csrf_token %}
+        <button class="danger">Удалить</button></form>
+    </div>
+  </article>
+{% empty %}
+  <p class="muted">Точек пока нет — создайте первую, чтобы вносить наблюдения.</p>
+{% endfor %}
+</div>
+</div>
+{% endblock %}

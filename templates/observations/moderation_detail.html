@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Модерация №{{ obs.pk }}{% endblock %}
+{% block content %}
+<h2>Наблюдение №{{ obs.pk }} — {{ obs.station }}</h2>
+<div class="card">
+<table>
+<tr><th>Автор</th><td>{{ obs.author.username }}</td></tr>
+<tr><th>Дата замера</th><td>{{ obs.observed_at|date:"d.m.Y H:i" }}</td></tr>
+<tr><th>Температура</th><td>{{ obs.temperature }} °C</td></tr>
+<tr><th>Давление</th><td>{{ obs.pressure }} гПа</td></tr>
+<tr><th>Ветер</th><td>{{ obs.wind_speed }} м/с {{ obs.wind_direction }}</td></tr>
+<tr><th>Осадки</th><td>{{ obs.precipitation_type }}, {{ obs.precipitation_amount }} мм</td></tr>
+<tr><th>Облачность</th><td>{{ obs.cloudiness }} %</td></tr>
+<tr><th>Явления</th><td>{% for p in obs.phenomena.all %}{{ p }} {% empty %}—{% endfor %}</td></tr>
+<tr><th>Аномалия</th><td>{% if obs.is_anomaly %}⚠ {{ obs.extra.anomaly_reasons|join:"; " }}{% else %}нет{% endif %}</td></tr>
+<tr><th>Повторных отправок</th><td>{{ obs.resubmit_count }}</td></tr>
+</table>
+{% if obs.photos.all %}<h3>Фото</h3>
+{% for ph in obs.photos.all %}<img src="{{ ph.image.url }}" style="max-width:220px;margin:4px;border-radius:6px">{% endfor %}
+{% endif %}
+</div>
+<div class="card">
+<h3>Решение (данные наблюдения модератор не редактирует)</h3>
+<form method="post">{% csrf_token %}
+  <label>Комментарий (обязателен для «Отклонить» и «На доработку»)</label>
+  <textarea name="comment" rows="3"></textarea>
+  <p>
+    <button name="decision" value="approve">Подтвердить</button>
+    <button name="decision" value="rework" class="sec">На доработку</button>
+    <button name="decision" value="reject" class="danger">Отклонить</button>
+  </p>
+</form>
+<h3>Журнал модерации</h3>
+<table><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Статус</th><th>Комментарий</th></tr>
+{% for l in obs.moderation_log.all %}
+<tr><td>{{ l.created_at|date:"d.m.Y H:i" }}</td><td>{{ l.moderator|default:"—" }}</td>
+<td>{{ l.action }}</td><td>{{ l.old_status }} → {{ l.new_status }}</td><td>{{ l.comment }}</td></tr>
+{% empty %}<tr><td colspan="5">Пусто.</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}

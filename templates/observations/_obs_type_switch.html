@@ -1,0 +1,60 @@
+<script>
+// Переключатель типа наблюдения. Подключается и в обычную форму, и в
+// анонимную: показывает только поля выбранного типа, чтобы для одного
+// замера не приходилось заполнять всю форму.
+(function () {
+  const sel = document.querySelector('select[name="obs_type"]');
+  if (!sel) return;
+  // какие поля показываем для каждого типа (пустые — просто не выводятся)
+  const FIELDS_BY_TYPE = {
+    // full — все числовые поля по методике;
+    // express/allergy — упрощённые категории wind_level / cloud_level
+    full:    ["temperature","pressure","wind_speed","wind_direction",
+              "precipitation_amount","precipitation_type","cloudiness",
+              "water_temperature","phenomena"],
+    express: ["temperature","wind_level","cloud_level"],
+    allergy: ["pollen_level","allergen","wind_level"],
+  };
+  // подсказка под переключателем: что именно обязательно
+  const HINTS = {
+    full:    "Полный замер по методике: температура, давление, ветер, осадки, облачность.",
+    express: "Быстрый замер: обязательна только температура, ветер и облачность — на глаз.",
+    allergy: "Пыльца и аллергены: обязателен только уровень пыльцы.",
+  };
+  const ALL = [...new Set(Object.values(FIELDS_BY_TYPE).flat())];
+
+  const seg = document.createElement("div");
+  seg.className = "seg"; seg.style.marginBottom = "6px";
+  [...sel.options].forEach(o => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = o.text; b.dataset.v = o.value;
+    b.addEventListener("click", () => { sel.value = o.value; apply(); });
+    seg.appendChild(b);
+  });
+  const hint = document.createElement("div");
+  hint.className = "muted"; hint.style.cssText = "font-size:12.5px;margin-bottom:10px";
+  sel.style.display = "none";
+  sel.parentNode.insertBefore(seg, sel);
+  sel.parentNode.insertBefore(hint, sel);
+
+  function apply() {
+    const t = sel.value || "full", show = FIELDS_BY_TYPE[t] || [];
+    seg.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("active", b.dataset.v === t));
+    hint.textContent = HINTS[t] || "";
+    for (const f of ALL) {
+      const row = document.getElementById("row-" + f);
+      if (!row) continue;
+      const on = show.includes(f);
+      row.style.display = on ? "" : "none";
+      if (!on) row.querySelectorAll("input,select").forEach(i => {
+        if (i.type === "checkbox") i.checked = false; else i.value = "";
+      });
+    }
+    // строка температуры воды дополнительно зависит от типа точки
+    if (typeof window.__waterToggle === "function") window.__waterToggle();
+  }
+  window.__applyObsType = apply;
+  apply();
+})();
+</script>
