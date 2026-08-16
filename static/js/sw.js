@@ -4,8 +4,8 @@
    Важно: перехватываются ТОЛЬКО пути из SHELL — раньше воркер вставал на пути
    у каждого GET-запроса (включая фавикон и статику) и добавлял задержку
    своего запуска к любой загрузке. */
-const CACHE = "sinoptik-shell-v2";   // v2: сбросить старые кэши со старым HTML
-const SHELL = ["/", "/observations/new/", "/static/js/drafts.js"];
+const CACHE = "sinoptik-shell-v3";
+const SHELL = ["/", "/static/js/drafts.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => null));

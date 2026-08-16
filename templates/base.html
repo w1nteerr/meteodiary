@@ -467,6 +467,18 @@ header .brand-short{display:none}
   body.nav-open .nav-toggle span:nth-child(2){opacity:0}
   body.nav-open .nav-toggle span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 
+  /* Пока меню открыто, поднимаем хедер выше затемнения: панель .nav лежит
+     внутри него, а header создаёт свой stacking context (z-index + фильтр),
+     из-за чего затемнение иначе накрывает панель и та не нажимается. */
+  body.nav-open header{z-index:1210;
+    /* фильтр размытия хедера распространяется на вложенную панель меню —
+       пока меню открыто, отключаем его, иначе пункты выглядят «затуманенными» */
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    background:transparent;border-bottom-color:transparent}
+  /* сама панель непрозрачная, поэтому шапка под ней не нужна */
+  body.nav-open header .brand{position:relative;z-index:1230}
+  body.nav-open header .nav-toggle{position:relative;z-index:1230}
+
   /* затемнение фона за выдвинутым меню — вне хедера, на весь экран */
   .nav-backdrop{display:block;position:fixed;inset:0;z-index:1190;
     background:rgba(10,12,14,.44);opacity:0;pointer-events:none;
@@ -474,7 +486,7 @@ header .brand-short{display:none}
   body.nav-open .nav-backdrop{opacity:1;pointer-events:auto}
 
   /* выдвижная панель меню справа */
-  header .nav{position:fixed;top:0;right:0;z-index:1200;
+  header .nav{position:fixed;top:0;right:0;z-index:1220;
     width:min(80vw,300px);height:100dvh;max-height:100dvh;
     display:flex;flex-direction:column;align-items:stretch;gap:2px;
     padding:72px 14px calc(18px + env(safe-area-inset-bottom)) 14px;
