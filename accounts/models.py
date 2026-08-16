@@ -11,6 +11,10 @@ class Roles(models.TextChoices):
 
 
 class User(AbstractUser):
+    # Уникальность e-mail на уровне БД (в дополнение к проверке в форме):
+    # null=True, потому что у служебной заглушки и анонимизированных аккаунтов
+    # почты нет, а несколько NULL в SQL дубликатами не считаются.
+    email = models.EmailField("e-mail", unique=True, null=True, blank=True)
     role = models.CharField("роль", max_length=16, choices=Roles.choices, default=Roles.OBSERVER)
     consent_at = models.DateTimeField("дата согласия на обработку ПД", null=True, blank=True)
     is_blocked = models.BooleanField("заблокирован", default=False)
@@ -31,7 +35,7 @@ class User(AbstractUser):
         stub, created = cls.objects.get_or_create(
             username=cls.ANONYMOUS_USERNAME,
             defaults={"first_name": "Анонимный", "last_name": "пользователь",
-                      "is_active": False, "role": Roles.OBSERVER},
+                      "email": None, "is_active": False, "role": Roles.OBSERVER},
         )
         if created:
             stub.set_unusable_password()
@@ -47,7 +51,7 @@ class User(AbstractUser):
         stub = User.get_anonymous_stub()
         Observation.objects.filter(author=self).update(author=stub)
         self.username = f"deleted_{self.pk}"
-        self.email = ""
+        self.email = None   # None, а не "", чтобы не нарушать unique
         self.first_name = self.last_name = ""
         self.set_unusable_password()
         self.is_active = False

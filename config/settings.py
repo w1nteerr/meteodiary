@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "drf_spectacular",
+    "drf_spectacular_sidecar",   # статика Swagger UI локально
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -216,6 +217,11 @@ SPECTACULAR_SETTINGS = {
                    "подтверждённых данных (ТЗ 4.7.3, drf-spectacular).",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # раздаём Swagger UI со своего сервера: не зависим от доступности
+    # внешнего CDN (в некоторых сетях он заблокирован)
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
 }
 
 # --- Celery (ТЗ 4.7.3): фоновая генерация отчётов, письма, периодика -------

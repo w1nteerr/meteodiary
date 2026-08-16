@@ -441,6 +441,9 @@ html[data-theme="dark"] .panel{box-shadow:none}
 .site-footer{max-width:1160px;margin:40px auto 24px;padding:16px 20px 0;
   border-top:1px solid var(--line);text-align:center;font-size:12.5px}
 .site-footer a{color:var(--mut);text-decoration:none}
+.site-footer .footer-sep{color:var(--mut);margin:0 10px;opacity:.6}
+@media(max-width:520px){.site-footer .footer-sep{display:block;height:0;
+  margin:6px 0;overflow:hidden;visibility:hidden}}
 .site-footer a:hover{color:var(--tx);text-decoration:underline}
 @media(max-width:700px){.site-footer{margin:28px auto 18px;padding:14px 12px 0}}
 
@@ -815,6 +818,8 @@ body.has-cookie-note{padding-bottom:var(--cookie-h,150px)}
 </script>
 <footer class="site-footer">
   <a href="{% url 'privacy' %}">Политика обработки персональных данных</a>
+  <span class="footer-sep">·</span>
+  <a href="{% url 'api_docs' %}">Документация API</a>
 </footer>
 </body>
 </html>

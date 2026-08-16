@@ -9,12 +9,14 @@
     <div id="f-precip-wrap"><label>Тип осадков</label><select id="f-precip"><option value="">Любой</option>
       {% for p in precip_types %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</select></div>
     <div id="f-phen-wrap"><label>Явление</label><select id="f-phen"><option value="">Любое</option>
-      {% for p in phenomena %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</select></div>
-    <div id="f-allergen-wrap" hidden><label>Аллерген</label><select id="f-allergen"><option value="">Любой</option></select></div>
-    <div><label>t от, °C</label><input type="number" id="f-tmin" step="0.1" style="width:90px"></div>
-    <div><label>t до, °C</label><input type="number" id="f-tmax" step="0.1" style="width:90px"></div>
-    <div><label style="display:inline"><input type="checkbox" id="f-photo" style="width:auto"> с фото</label></div>
-    <div><button id="f-apply">Применить</button></div>
+      {% for p in phenomena %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</select>
+      {# аллерген занимает ту же ячейку, что «Явление» — высота панели постоянна #}
+      <div id="f-allergen-wrap" hidden><label>Аллерген</label><select id="f-allergen"><option value="">Любой</option></select></div>
+    </div>
+    <div class="f-temp-wrap"><label>t от, °C</label><input type="number" id="f-tmin" step="0.1" style="width:90px"></div>
+    <div class="f-temp-wrap"><label>t до, °C</label><input type="number" id="f-tmax" step="0.1" style="width:90px"></div>
+    <div class="f-photo-wrap"><label style="display:inline"><input type="checkbox" id="f-photo" style="width:auto"> с фото</label></div>
+    <div class="f-apply-wrap"><button id="f-apply">Применить</button></div>
   </div>
 </div>
 
@@ -199,7 +201,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const wxOpts = { pane: "weather", opacity: 1,
         keepBuffer: 1, attribution: "погодные слои © OpenWeatherMap" };
       const precip = L.tileLayer(owmUrl("precipitation"), wxOpts);
-      const clouds = L.tileLayer(owmUrl("clouds"), wxOpts);
       // Собственный индикатор «идёт загрузка слоя»: браузерная строка
       // состояния не всегда показывает передачу тайлов (особенно когда они
       // приходят из кэша), поэтому статус рисуем сами по событиям Leaflet
@@ -213,21 +214,19 @@ document.addEventListener("DOMContentLoaded", () => {
       let wxLoading = 0;
       const wxShow = () => { wxLoading++; wxBadge.style.display = "block"; };
       const wxHide = () => { if (--wxLoading <= 0) { wxLoading = 0; wxBadge.style.display = "none"; } };
-      for (const lyr of [precip, clouds]) {
+      for (const lyr of [precip]) {
         lyr.on("loading", wxShow);
         lyr.on("load", wxHide);
       }
-      // Слои погоды НЕ включаются при старте: тайлы OWM медленные, и страница
-      // «висела» в загрузке. Вместо этого запоминаем выбор пользователя:
+      // Слои погоды не включаются при старте: тайлы OWM медленные, и карта
+      // из-за них долго «висела» бы в загрузке. Запоминаем выбор пользователя:
       // включил галочку один раз — при следующих заходах слой вернётся сам.
       const wxSaved = localStorage.getItem("wx-layers");
       if (wxSaved) {
         if (wxSaved.includes("precip")) precip.addTo(map);
-        if (wxSaved.includes("clouds")) clouds.addTo(map);
       }
       const saveWx = () => localStorage.setItem("wx-layers",
-        [map.hasLayer(precip) && "precip", map.hasLayer(clouds) && "clouds"]
-          .filter(Boolean).join(","));
+        [map.hasLayer(precip) && "precip"].filter(Boolean).join(","));
       map.on("overlayadd overlayremove", saveWx);
       // Радио-слои (baseLayers): можно включить ЛИБО погодные наблюдения,
       // ЛИБО аллергонаблюдения — Leaflet сам гарантирует, что активен только
@@ -252,8 +251,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasAllergens = sel && sel.options.length > 1;
         if (allergenWrap) allergenWrap.hidden = !(isAllergy && hasAllergens);
         if (!isAllergy && sel) sel.value = "";
-        if (precipWrap) precipWrap.hidden = isAllergy;
-        if (phenWrap) phenWrap.hidden = isAllergy;
+        // Прячем ВНУТРЕННОСТИ ячеек, а не сами ячейки: если убрать ячейку
+        // целиком (hidden), сетка перестроится и панель изменит высоту —
+        // страница «прыгнет». Пустая ячейка сохраняет разметку на месте.
+        for (const wrap of [precipWrap, phenWrap]) {
+          if (!wrap) continue;
+          wrap.querySelectorAll(":scope > label, :scope > select")
+            .forEach(el => el.hidden = isAllergy);
+        }
         if (isAllergy) {
           const fp = document.getElementById("f-precip"), fh = document.getElementById("f-phen");
           if (fp) fp.value = ""; if (fh) fh.value = "";
@@ -262,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       // Накладываемые слои-подложки (осадки/облачность/тепловая карта) — свой
       // контрол: если OWM не работает, снимем именно его, не трогая метки.
-      const overlays = { "Осадки": precip, "Облачность": clouds };
+      const overlays = { "Осадки": precip };
       if (window.heat) overlays["Тепловая карта t°"] = window.heat;
       const owmCtl = L.control.layers(null, overlays,
                        { collapsed: false, position: "topright" }).addTo(map);
@@ -272,26 +277,25 @@ document.addEventListener("DOMContentLoaded", () => {
       setInterval(() => { owmErr = Math.max(0, owmErr - 2); }, 5000);
       const owmFail = () => {
         if (++owmErr >= 25) {
-          map.removeLayer(precip); map.removeLayer(clouds); owmCtl.remove();
+          map.removeLayer(precip); owmCtl.remove();
           console.warn("Слой OpenWeatherMap отключён: тайлы не загружаются " +
                        "(вероятно, ключ ещё не активирован — код 401 в Network)");
         }
       };
       precip.on("tileerror", owmFail);
-      clouds.on("tileerror", owmFail);
       // Как в Яндекс.Погоде: при включённом погодном слое подложка
       // обесцвечивается и высветляется — осадки и облака резко заметнее
-      let wxOn = (map.hasLayer(precip) ? 1 : 0) + (map.hasLayer(clouds) ? 1 : 0);
+      let wxOn = map.hasLayer(precip) ? 1 : 0;
       const dimBase = () => {
         map.getPane("tilePane").style.filter = wxOn > 0
           ? "grayscale(.75) brightness(1.12) contrast(.92)" : "";
       };
       dimBase();
       map.on("overlayadd", (e) => {
-        if (e.layer === precip || e.layer === clouds) { wxOn++; dimBase(); }
+        if (e.layer === precip) { wxOn++; dimBase(); }
       });
       map.on("overlayremove", (e) => {
-        if (e.layer === precip || e.layer === clouds) { wxOn--; dimBase(); }
+        if (e.layer === precip) { wxOn--; dimBase(); }
       });
     }
   } catch (e) {

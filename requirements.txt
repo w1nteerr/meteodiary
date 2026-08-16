@@ -1,6 +1,7 @@
 Django==4.2.*
 djangorestframework>=3.14
 drf-spectacular>=0.27      # документация API (Swagger/OpenAPI, ТЗ 4.7.3)
+drf-spectacular-sidecar    # файлы Swagger UI локально, без внешнего CDN
 django-allauth[socialaccount]>=65   # вход через сторонние сервисы (VK ID)
 Pillow>=10.0
 reportlab>=4.0
