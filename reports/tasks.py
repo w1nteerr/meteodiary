@@ -12,12 +12,13 @@ from core.services import notify
 from core.models import Notification
 
 
-@shared_task
 def dash(v):
-    """Пустое значение (поле не заполняется этим типом наблюдения) — прочерк."""
+    """Пустое значение (поле не заполняется этим типом наблюдения) — прочерк.
+    Обычная вспомогательная функция, не задача Celery."""
     return "—" if v is None else f"{v}"
 
 
+@shared_task
 def generate_report(report_id):
     from observations.models import Observation, Status
     from .models import Report
@@ -120,16 +121,27 @@ def _build_pdf(rep, rows):
     story.append(Spacer(0, 4 * mm))
 
     # Сводка
-    # экспресс/аллерго-наблюдения заполняют не все поля — агрегируем непустые
+    # экспресс/аллерго-наблюдения заполняют не все поля — агрегируем непустые.
+    # Любой список может оказаться пустым (например, все замеры аллергические),
+    # поэтому считаем через безопасные помощники, а не напрямую.
     temps = [float(o.temperature) for o in rows if o.temperature is not None]
     press = [float(o.pressure) for o in rows if o.pressure is not None]
     winds = [float(o.wind_speed) for o in rows if o.wind_speed is not None]
     psum = sum(float(o.precipitation_amount or 0) for o in rows)
+
+    def agg(values, fn):
+        """Агрегат по непустому списку, иначе прочерк."""
+        return f"{fn(values):.1f}" if values else "—"
+
     sm = [["Наблюдений", "t мин, °C", "t средняя, °C", "t макс, °C",
            "Давление ср., гПа", "Ветер макс, м/с", "Осадки, мм"],
-          [str(len(rows)), f"{min(temps):.1f}", f"{sum(temps)/len(temps):.1f}",
-           f"{max(temps):.1f}", f"{sum(press)/len(press):.1f}",
-           f"{max(winds):.1f}", f"{psum:.1f}"]]
+          [str(len(rows)),
+           agg(temps, min),
+           agg(temps, lambda v: sum(v) / len(v)),
+           agg(temps, max),
+           agg(press, lambda v: sum(v) / len(v)),
+           agg(winds, max),
+           f"{psum:.1f}"]]
     t = Table(sm, colWidths=[(landscape(A4)[0] - 28 * mm) / 7] * 7)
     t.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, 0), "DejaVu"),

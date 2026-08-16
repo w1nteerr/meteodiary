@@ -350,7 +350,7 @@ html[data-theme="dark"] .panel{box-shadow:none}
 .form-card .seg button{flex:1}
 @media(max-width:700px){
   /* компактнее интерфейс: чуть меньше базовый шрифт и все отступы */
-  html{font-size:15px}
+  html{font-size:15px;scrollbar-gutter:stable}
   table{display:block;overflow-x:auto;white-space:nowrap;
         -webkit-overflow-scrolling:touch;scrollbar-width:thin}
   th,td{padding:9px 10px;font-size:13.5px}
@@ -405,6 +405,33 @@ html[data-theme="dark"] .panel{box-shadow:none}
   .seg button{font-size:12px;padding:0 6px}
 }
 
+/* --- Панель фильтров на телефоне: аккуратная сетка 2×N вместо длинной
+   колонки. Короткие поля (температура, чекбокс) занимают по половине строки,
+   кнопка «Применить» — всю ширину. --- */
+@media(max-width:700px){
+  .filters{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px;align-items:end}
+  .filters > div{min-width:0}
+  /* поля с длинными подписями занимают всю строку */
+  /* Ячейки «Тип осадков» и «Явление» — во всю ширину и с фиксированной
+     высотой: при переключении слоя их содержимое скрывается (там появляется
+     фильтр аллергена), и без min-height панель меняла бы высоту, из-за чего
+     страница «прыгала». */
+  #f-precip-wrap,#f-phen-wrap{grid-column:1 / -1;min-height:60px}
+  .filters input,.filters select{width:100%;max-width:100%}
+  .filters input[type="number"]{width:100%!important}
+  .filters > div > label{font-size:11.5px;color:var(--mut);font-weight:600;
+    display:block;min-height:0;margin:0 0 4px;
+    text-transform:uppercase;letter-spacing:.03em}
+  .filters input,.filters select{margin:0;min-height:42px}
+  /* чекбокс «с фото» и кнопка — на всю ширину, кнопка последней */
+  .filters .f-photo-wrap{grid-column:1 / -1;display:flex;align-items:center;
+    min-height:40px}
+  .filters .f-photo-wrap label{margin:0;font-size:14px;color:var(--tx);
+    text-transform:none;letter-spacing:0;font-weight:500}
+  .filters .f-apply-wrap{grid-column:1 / -1;margin-top:2px}
+  .filters #f-apply{width:100%}
+}
+
 /* --- Пара полей координат в анонимной форме: рядом на десктопе,
    в столбик на телефоне --- */
 .coord-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -456,13 +483,24 @@ header .brand-short{display:none}
   header .brand-short{display:inline}
 
   /* кнопка-бургер: три полоски, анимируются в крестик при открытии */
-  header .nav-toggle{display:inline-flex;flex-direction:column;justify-content:center;
-    align-items:center;gap:5px;background:transparent;border:1px solid var(--line);
+  /* Кнопка-бургер: заметная подложка, чтобы полоски не сливались с фоном
+     шапки (особенно в тёмной теме, где и фон, и полоски светлые). */
+  header button.nav-toggle:not(.sec):not(.danger){display:inline-flex;
+    flex-direction:column;justify-content:center;
+    align-items:center;gap:5px;background:var(--soft);border:1px solid var(--line);
     border-radius:10px;width:40px;height:40px;padding:0;margin-left:auto;flex:none;
-    cursor:pointer;transition:background .15s}
-  header .nav-toggle:hover{background:var(--soft);transform:none}
+    cursor:pointer;transition:background .15s,border-color .15s}
+  header .nav-toggle:hover{background:var(--line);transform:none}
   header .nav-toggle span{display:block;width:19px;height:2px;border-radius:2px;
     background:var(--tx);transition:transform .28s ease, opacity .2s ease}
+  /* тёмная тема: тёмная подложка со светлыми полосками — контраст явный */
+  html[data-theme="dark"] header button.nav-toggle:not(.sec):not(.danger){
+    background:#22252a;border-color:#3a3f47}
+  html[data-theme="dark"] header button.nav-toggle:not(.sec):not(.danger):hover{
+    background:#2c3037}
+  html[data-theme="dark"] header button.nav-toggle span{background:#f2f4f7}
+  /* когда меню открыто, кнопка лежит поверх панели — фон берём от панели */
+  body.nav-open header .nav-toggle{background:var(--bg);border-color:var(--line)}
   body.nav-open .nav-toggle span:nth-child(1){transform:translateY(7px) rotate(45deg)}
   body.nav-open .nav-toggle span:nth-child(2){opacity:0}
   body.nav-open .nav-toggle span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
@@ -475,8 +513,9 @@ header .brand-short{display:none}
        пока меню открыто, отключаем его, иначе пункты выглядят «затуманенными» */
     backdrop-filter:none;-webkit-backdrop-filter:none;
     background:transparent;border-bottom-color:transparent}
-  /* сама панель непрозрачная, поэтому шапка под ней не нужна */
-  body.nav-open header .brand{position:relative;z-index:1230}
+  /* Панель непрозрачная и перекрывает шапку: логотип оставляем под ней,
+     а кнопку-крестик поднимаем выше, чтобы меню можно было закрыть. */
+  body.nav-open header .brand{opacity:0;transition:opacity .2s ease}
   body.nav-open header .nav-toggle{position:relative;z-index:1230}
 
   /* затемнение фона за выдвинутым меню — вне хедера, на весь экран */
@@ -513,7 +552,9 @@ header .brand-short{display:none}
   header #theme-toggle{width:100%;justify-content:flex-start}
   header .nav a.nav-desktop-only{display:flex}
 
-  /* блокировка прокрутки фона, пока меню открыто */
+  /* Блокировка прокрутки фона, пока меню открыто. scrollbar-gutter резервирует
+     место под полосу прокрутки заранее, иначе при её исчезновении страница
+     «прыгает» и элементы съезжают вбок. */
   body.nav-open{overflow:hidden}
 }
 
@@ -536,6 +577,8 @@ header .brand-short{display:none}
   background:var(--card);border:1px solid var(--glass-line);border-radius:16px;
   backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
   box-shadow:var(--shadow);padding:14px 18px;font-size:13.5px;line-height:1.5}
+#cookie-note .cookie-text{line-height:1.55}
+#cookie-note .cookie-text a{color:var(--tx);text-decoration:underline;white-space:nowrap}
 #cookie-note .cookie-btns{display:flex;gap:8px;flex:none;flex-wrap:wrap}
 #cookie-note button{flex:none;padding:8px 14px;font-size:13px;white-space:nowrap}
 @media(max-width:560px){#cookie-note{flex-direction:column;align-items:stretch;text-align:center}
@@ -745,11 +788,13 @@ body.has-cookie-note{padding-bottom:var(--cookie-h,150px)}
   if (localStorage.getItem("cookie-consent")) return;
   const n = document.createElement("div");
   n.id = "cookie-note";
-  n.innerHTML = '<span>Сайт использует технические куки (вход, защита форм) и, ' +
-    'с вашего согласия, куки аналитики посещаемости.</span>' +
+  n.innerHTML = '<span class="cookie-text">🍪 Мы храним небольшие файлы cookie — ' +
+    'чтобы вы оставались в аккаунте. Ещё можем собирать обезличенную ' +
+    'статистику посещений, но только если разрешите.' +
+    ' <a href="/privacy/">Подробнее</a></span>' +
     '<span class="cookie-btns">' +
-    '<button type="button" id="cookie-all-btn">Принять всё</button>' +
-    '<button type="button" class="sec" id="cookie-nec-btn">Только необходимые</button></span>';
+    '<button type="button" id="cookie-all-btn">Хорошо, согласен</button>' +
+    '<button type="button" class="sec" id="cookie-nec-btn">Только нужные</button></span>';
   document.body.appendChild(n);
   // запас снизу ровно на высоту баннера: иначе на низких экранах он
   // перекрывает кнопки формы и они становятся ненажимаемыми

@@ -22,6 +22,7 @@ def api_notifications(request):
     return JsonResponse({"unread": unread, "items": items})
 
 
+@login_required
 def notifications(request):
     qs = request.user.notifications.all()
     page = Paginator(qs, 20).get_page(request.GET.get("page"))
