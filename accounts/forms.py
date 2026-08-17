@@ -30,9 +30,8 @@ class RegisterForm(MathCaptchaMixin, UserCreationForm):
     email = forms.EmailField(label="E-mail", required=True)
     # ссылка на политику обязательна: согласие должно быть информированным
     consent = forms.BooleanField(required=True, label=mark_safe(
-        'Даю согласие на обработку персональных данных в соответствии с '
-        '<a href="/privacy/" target="_blank" rel="noopener">Политикой обработки '
-        'персональных данных</a>'))
+        'Согласен с условиями '
+        '<a href="/privacy/" target="_blank" rel="noopener">обработки данных</a>'))
 
     class Meta:
         model = User

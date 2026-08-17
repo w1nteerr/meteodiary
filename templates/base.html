@@ -530,14 +530,28 @@ header .brand-short{display:none}
   /* выдвижная панель меню справа */
   header .nav{position:fixed;top:0;right:0;z-index:1220;
     width:min(80vw,300px);height:100dvh;max-height:100dvh;
-    display:flex;flex-direction:column;align-items:stretch;gap:2px;
-    padding:72px 14px calc(18px + env(safe-area-inset-bottom)) 14px;
-    background:var(--bg);border-left:1px solid var(--line);
-    box-shadow:-16px 0 40px -20px rgba(10,12,14,.5);
+    display:flex;flex-direction:column;align-items:stretch;gap:3px;
+    padding:70px 12px calc(18px + env(safe-area-inset-bottom)) 12px;
+    /* мягкий градиент вместо плоской заливки: панель заметно отделяется
+       от страницы, но не спорит с общим оформлением */
+    background:color-mix(in srgb, var(--soft) 85%, var(--bg));
+    border-left:1px solid var(--line);
+    box-shadow:-20px 0 50px -18px rgba(10,12,14,.55);
     overflow-y:auto;-webkit-overflow-scrolling:touch;
     transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
     visibility:hidden}
   body.nav-open header .nav{transform:translateX(0);visibility:visible}
+  /* у пунктов своя лёгкая подложка — читаются как отдельные кнопки */
+  header .nav a:not(.cta):not(#theme-toggle){
+    background:var(--bg);border:1px solid var(--line)}
+  header .nav a:not(.cta):active{background:var(--soft);border-color:var(--line)}
+  html[data-theme="dark"] header .nav{
+    background:#191c20;
+    border-left-color:#2f343b;
+    box-shadow:-20px 0 50px -18px rgba(0,0,0,.7)}
+  html[data-theme="dark"] header .nav a:not(.cta):not(#theme-toggle){
+    background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.09)}
+  html[data-theme="dark"] header .nav a:not(.cta):active{background:rgba(255,255,255,.09)}
 
   header .nav a{padding:12px 13px;border-radius:11px;min-height:46px;font-size:14.5px;
     display:flex;align-items:center;width:100%;color:var(--tx)}
@@ -817,7 +831,7 @@ body.has-cookie-note{padding-bottom:var(--cookie-h,150px)}
 })();
 </script>
 <footer class="site-footer">
-  <a href="{% url 'privacy' %}">Политика обработки персональных данных</a>
+  <a href="{% url 'privacy' %}">Обработка данных и безопасность</a>
   <span class="footer-sep">·</span>
   <a href="{% url 'api_docs' %}">Документация API</a>
 </footer>

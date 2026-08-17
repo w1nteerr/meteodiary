@@ -258,14 +258,12 @@ def api_dashboard(request):
 
 
 def privacy(request):
-    """Политика обработки персональных данных (152-ФЗ).
+    """Страница «Обработка данных и безопасность».
 
-    Реквизиты оператора берутся из настроек, чтобы не хранить их в шаблоне:
-    перед публикацией заполните PDN_OPERATOR_NAME и PDN_OPERATOR_CONTACT.
+    Учебный проект: персональные реквизиты владельца намеренно не публикуются,
+    указывается только дата редакции (PDN_POLICY_UPDATED из настроек).
     """
     from django.conf import settings
     return render(request, "core/privacy.html", {
-        "operator_name": settings.PDN_OPERATOR_NAME,
-        "operator_contact": settings.PDN_OPERATOR_CONTACT,
         "updated_at": settings.PDN_POLICY_UPDATED,
     })

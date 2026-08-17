@@ -201,6 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const wxOpts = { pane: "weather", opacity: 1,
         keepBuffer: 1, attribution: "погодные слои © OpenWeatherMap" };
       const precip = L.tileLayer(owmUrl("precipitation"), wxOpts);
+      const clouds = L.tileLayer(owmUrl("clouds"), wxOpts);
       // Собственный индикатор «идёт загрузка слоя»: браузерная строка
       // состояния не всегда показывает передачу тайлов (особенно когда они
       // приходят из кэша), поэтому статус рисуем сами по событиям Leaflet
@@ -214,7 +215,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let wxLoading = 0;
       const wxShow = () => { wxLoading++; wxBadge.style.display = "block"; };
       const wxHide = () => { if (--wxLoading <= 0) { wxLoading = 0; wxBadge.style.display = "none"; } };
-      for (const lyr of [precip]) {
+      for (const lyr of [precip, clouds]) {
         lyr.on("loading", wxShow);
         lyr.on("load", wxHide);
       }
@@ -224,9 +225,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const wxSaved = localStorage.getItem("wx-layers");
       if (wxSaved) {
         if (wxSaved.includes("precip")) precip.addTo(map);
+        if (wxSaved.includes("clouds")) clouds.addTo(map);
       }
       const saveWx = () => localStorage.setItem("wx-layers",
-        [map.hasLayer(precip) && "precip"].filter(Boolean).join(","));
+        [map.hasLayer(precip) && "precip", map.hasLayer(clouds) && "clouds"]
+          .filter(Boolean).join(","));
       map.on("overlayadd overlayremove", saveWx);
       // Радио-слои (baseLayers): можно включить ЛИБО погодные наблюдения,
       // ЛИБО аллергонаблюдения — Leaflet сам гарантирует, что активен только
@@ -267,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       // Накладываемые слои-подложки (осадки/облачность/тепловая карта) — свой
       // контрол: если OWM не работает, снимем именно его, не трогая метки.
-      const overlays = { "Осадки": precip };
+      const overlays = { "Осадки": precip, "Облачность": clouds };
       if (window.heat) overlays["Тепловая карта t°"] = window.heat;
       const owmCtl = L.control.layers(null, overlays,
                        { collapsed: false, position: "topright" }).addTo(map);
@@ -277,25 +280,26 @@ document.addEventListener("DOMContentLoaded", () => {
       setInterval(() => { owmErr = Math.max(0, owmErr - 2); }, 5000);
       const owmFail = () => {
         if (++owmErr >= 25) {
-          map.removeLayer(precip); owmCtl.remove();
+          map.removeLayer(precip); map.removeLayer(clouds); owmCtl.remove();
           console.warn("Слой OpenWeatherMap отключён: тайлы не загружаются " +
                        "(вероятно, ключ ещё не активирован — код 401 в Network)");
         }
       };
       precip.on("tileerror", owmFail);
+      clouds.on("tileerror", owmFail);
       // Как в Яндекс.Погоде: при включённом погодном слое подложка
       // обесцвечивается и высветляется — осадки и облака резко заметнее
-      let wxOn = map.hasLayer(precip) ? 1 : 0;
+      let wxOn = (map.hasLayer(precip) ? 1 : 0) + (map.hasLayer(clouds) ? 1 : 0);
       const dimBase = () => {
         map.getPane("tilePane").style.filter = wxOn > 0
           ? "grayscale(.75) brightness(1.12) contrast(.92)" : "";
       };
       dimBase();
       map.on("overlayadd", (e) => {
-        if (e.layer === precip) { wxOn++; dimBase(); }
+        if (e.layer === precip || e.layer === clouds) { wxOn++; dimBase(); }
       });
       map.on("overlayremove", (e) => {
-        if (e.layer === precip) { wxOn--; dimBase(); }
+        if (e.layer === precip || e.layer === clouds) { wxOn--; dimBase(); }
       });
     }
   } catch (e) {

@@ -165,11 +165,10 @@ OWM_API_KEY = os.environ.get("OWM_API_KEY", "")
 # Пустой ключ = кнопка просто не показывается.
 WEATHER_TIMEOUT = 6              # секунд: не заставляем пользователя ждать
 
-# --- Реквизиты оператора для страницы политики обработки ПДн (152-ФЗ) ------
-# Заполните перед публикацией: эти значения выводятся на /privacy/.
-PDN_OPERATOR_NAME = os.environ.get("PDN_OPERATOR_NAME", "оператор Сервиса")
-PDN_OPERATOR_CONTACT = os.environ.get("PDN_OPERATOR_CONTACT", "укажите e-mail для обращений")
-PDN_POLICY_UPDATED = os.environ.get("PDN_POLICY_UPDATED", "2026 год")
+# --- Страница «Обработка данных и безопасность» (/privacy/) ----------------
+# Учебный проект: личные реквизиты владельца не публикуются, выводится только
+# дата редакции документа.
+PDN_POLICY_UPDATED = os.environ.get("PDN_POLICY_UPDATED", "август 2026")
 
 # --- Логирование (ТЗ 4.3: данные для мониторинга и разбора отказов) ---------
 LOGGING = {
