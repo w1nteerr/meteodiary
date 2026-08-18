@@ -1,39 +1,54 @@
-/* Service Worker (ТЗ 4.7.3): кэширование оболочки приложения, чтобы форма
-   внесения наблюдения открывалась при отсутствии сети (черновики — IndexedDB,
-   см. drafts.js). Стратегия: сеть с падением в кэш (network-first).
-   Важно: перехватываются ТОЛЬКО пути из SHELL — раньше воркер вставал на пути
-   у каждого GET-запроса (включая фавикон и статику) и добавлял задержку
-   своего запуска к любой загрузке. */
-const CACHE = "sinoptik-shell-v3";   // v3: сброс кэша, страница логина убрана из оболочки
-// /observations/new/ убрана намеренно: она требует авторизации и отдаёт
-// редирект 302, из-за чего установка воркера зацикливалась и Safari на iOS
-// переставал открывать сайт.
-const SHELL = ["/", "/static/js/drafts.js"];
+/* Service Worker (ТЗ 4.7.3): офлайн-доступ к скрипту черновиков, чтобы форма
+   внесения наблюдения продолжала работать без сети (сами черновики хранятся
+   в IndexedDB, см. drafts.js).
+
+   ВАЖНО о том, чего здесь намеренно НЕТ:
+   раньше воркер кэшировал HTML-страницы ("/" и форму наблюдения). Это давало
+   цикл при установке: воркер запрашивал "/", браузер при загрузке "/" снова
+   обращался к sw.js, тот опять просил "/" — и так по кругу. Safari (особенно
+   на iPad) не успевал завершить установку, и страница просто зависала.
+   Поэтому кэшируем ТОЛЬКО статические файлы и не трогаем навигационные
+   запросы: за HTML всегда отвечает сеть. */
+const CACHE = "sinoptik-static-v4";
+
+// только статика, никаких HTML-страниц
+const ASSETS = ["/static/js/drafts.js"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => null));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => null));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil(caches.keys().then((keys) =>
-    Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));
-  self.clients.claim();
+  // удаляем кэши прошлых версий, в том числе те, где лежал HTML
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;            // POST уходит в сеть/IndexedDB
-  const path = new URL(e.request.url).pathname;
-  if (!SHELL.includes(path)) return;                 // не наше — браузер грузит сам
+  const req = e.request;
+  // Навигационные запросы (переходы по страницам) не перехватываем вообще —
+  // именно они вызывали зацикливание.
+  if (req.mode === "navigate" || req.destination === "document") return;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;   // чужие домены не трогаем
+  if (!ASSETS.includes(url.pathname)) return;
+
+  // сеть с падением в кэш: свежая версия важнее, офлайн — запасной вариант
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then((resp) => {
         if (resp.ok) {
           const copy = resp.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return resp;
       })
-      .catch(() => caches.match(e.request))
+      .catch(() => caches.match(req))
   );
 });

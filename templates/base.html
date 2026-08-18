@@ -17,8 +17,20 @@
   document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
 </script>
 <script>
+// Регистрация сервис-воркера (офлайн-доступ к скрипту черновиков).
+// Открытие сайта с ?nosw=1 принудительно снимает воркер и чистит кэши —
+// аварийный выход, если старая версия воркера мешает загрузке страницы.
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  if (new URLSearchParams(location.search).has("nosw")) {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister())))
+      .then(() => caches.keys())
+      .then(ks => Promise.all(ks.map(k => caches.delete(k))))
+      .then(() => { location.replace(location.pathname); });
+  } else {
+    window.addEventListener("load", () =>
+      navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
 }
 </script>
 <style>

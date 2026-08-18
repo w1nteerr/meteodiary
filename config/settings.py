@@ -184,8 +184,29 @@ LOGGING = {
     },
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"  # для разработки
-DEFAULT_FROM_EMAIL = "noreply@sinoptik.local"
+# --- Отправка почты --------------------------------------------------------
+# Письма нужны для восстановления пароля, подтверждения смены e-mail и
+# уведомлений о решениях модератора.
+# Если EMAIL_HOST_USER не задан, письма печатаются в консоль (режим разработки):
+# так проект запускается без настройки SMTP и ничего не падает.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.yandex.ru")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "465"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+# Яндекс требует SSL на 465-м порту; на 587-м вместо этого нужен TLS
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "1") == "1"
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "0") == "1"
+EMAIL_TIMEOUT = 10          # секунд: не подвешиваем запрос из-за почты
+
+if EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# Адрес отправителя должен совпадать с ящиком SMTP, иначе Яндекс отклонит письмо
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@meteodiary.ru")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 PASSWORD_RESET_TIMEOUT = 24 * 3600  # срок ссылки сброса — 24 ч (ТЗ FR-003)
 
 REST_FRAMEWORK = {
