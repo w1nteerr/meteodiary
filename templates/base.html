@@ -240,7 +240,14 @@ tr:hover td{background:var(--soft)}
 
 /* --- Графики и чипы --- */
 .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px}
-@media(max-width:560px){.charts-grid{grid-template-columns:1fr}}
+/* На узких экранах графики шли впритык друг к другу: добавляем вертикальный
+   отступ и внутренние поля, чтобы подписи осей не липли к краям карточки. */
+@media(max-width:560px){
+  .charts-grid{grid-template-columns:1fr;gap:18px}
+  .chart-card{padding:16px 12px 18px}
+  .chart-card h3{margin-bottom:12px}
+  .ch{padding:4px 2px}
+}
 .chart-card h3{text-align:center}
 .ch{position:relative;margin:0 auto}
 .chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -415,6 +422,36 @@ html[data-theme="dark"] .panel{box-shadow:none}
 @media(max-width:400px){
   .m-num,.stat-num{font-size:26px}
   .seg button{font-size:12px;padding:0 6px}
+}
+
+/* --- Планшеты (iPad и подобные, 701–1200px, включая альбомную ориентацию):
+   десктопная раскладка фильтров здесь разъезжается — поля разной ширины
+   встают неровно. Даём аккуратную сетку с одинаковыми ячейками. --- */
+@media(min-width:701px) and (max-width:1200px){
+  .filters{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 16px;
+    align-items:end}
+  /* на широком планшете (альбом) помещается четыре колонки */
+  @media(min-width:1000px){
+    .filters{grid-template-columns:repeat(4,1fr)}
+  }
+  .filters > div{min-width:0}
+  .filters input,.filters select{width:100%;max-width:100%}
+  .filters input[type="number"]{width:100%!important}
+  .filters > div > label{font-size:11.5px;color:var(--mut);font-weight:600;
+    display:block;min-height:0;margin:0 0 4px;
+    text-transform:uppercase;letter-spacing:.03em}
+  .filters input,.filters select{margin:0;min-height:44px}
+  /* чекбокс и кнопка — в одной строке, кнопка прижата вправо */
+  .filters .f-photo-wrap{display:flex;align-items:center;min-height:44px}
+  .filters .f-photo-wrap label{margin:0;font-size:14px;color:var(--tx);
+    text-transform:none;letter-spacing:0;font-weight:500;min-height:0}
+  .filters .f-apply-wrap{display:flex;align-items:end}
+  .filters #f-apply{width:100%;min-height:44px}
+  /* карта на планшете выше — экран крупный, есть куда развернуться */
+  #map{height:62vh;min-height:420px}
+  /* графики по два в ряд, а не втиснутые по три */
+  .charts-grid{grid-template-columns:1fr 1fr;gap:22px}
+  .dash-grid2{grid-template-columns:1fr 1fr;gap:20px}
 }
 
 /* --- Панель фильтров на телефоне: аккуратная сетка 2×N вместо длинной
