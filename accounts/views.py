@@ -1,5 +1,7 @@
 """FR-001 регистрация, FR-002 вход (антибрутфорс), FR-003 сброс пароля,
 FR-011 выход, FR-012 профиль/удаление аккаунта."""
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout, update_session_auth_hash
@@ -14,8 +16,36 @@ from django.core.mail import send_mail
 from rest_framework.authtoken.models import Token
 
 from core.services import audit
+
+log = logging.getLogger(__name__)
 from .forms import RegisterForm, MathCaptchaMixin, EmailChangeForm, DeleteAccountForm
 from .models import Roles
+
+
+def _send_welcome_email(request, user):
+    """Приветственное письмо после регистрации.
+
+    Отправка не должна мешать регистрации: при недоступном SMTP пользователь
+    всё равно попадает в аккаунт, а ошибка уходит в лог.
+    """
+    if not user.email:
+        return
+    try:
+        send_mail(
+            "Добро пожаловать в «Дневник синоптика»",
+            (f"Здравствуйте, {user.username}!\n\n"
+             "Вы зарегистрировались в сервисе «Дневник синоптика».\n\n"
+             "Что можно делать:\n"
+             "• создать свои точки наблюдения;\n"
+             "• вносить замеры — полные, экспресс или аллергонаблюдения;\n"
+             "• смотреть карту, графики и формировать отчёты.\n\n"
+             "Внесённые наблюдения проходят проверку модератором, после чего\n"
+             "появляются на общей карте.\n\n"
+             f"Сайт: https://{settings.SITE_DOMAIN}/\n\n"
+             "Если вы не регистрировались, просто проигнорируйте это письмо."),
+            None, [user.email], fail_silently=True)
+    except Exception:
+        log.warning("Не удалось отправить приветственное письмо", exc_info=True)
 
 
 def register(request):
@@ -28,6 +58,7 @@ def register(request):
             user.consent_at = timezone.now()   # фиксация согласия (ТЗ 4.4)
             user.save()
             audit(request, "register", obj=f"user:{user.pk}")
+            _send_welcome_email(request, user)
             # при нескольких бэкендах (пароль + VK ID) бэкенд указывается явно
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             messages.success(request, "Регистрация выполнена. Добро пожаловать!")

@@ -11,8 +11,11 @@
   {% for f in form.visible_fields %}
     <label>{% if f.name == "captcha" %}Проверка: {{ captcha_q }}{% else %}{{ f.label }}{% endif %}</label>
     {{ f }}{{ f.errors }}
-    {% if f.help_text %}<div class="muted">{{ f.help_text|safe }}</div>{% endif %}
+    {# для полей пароля свою подсказку не выводим — ниже есть наглядный список #}
+    {% if f.help_text and f.name != "password1" and f.name != "password2" %}
+      <div class="muted">{{ f.help_text|safe }}</div>{% endif %}
   {% endfor %}
+  {% include "accounts/_password_help.html" %}
   <p><button type="submit">Зарегистрироваться</button></p>
   <p class="muted">Забыли пароль после регистрации? <a href="{% url 'password_reset' %}">Восстановление пароля</a></p>
 </form>

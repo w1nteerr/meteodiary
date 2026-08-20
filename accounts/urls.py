@@ -10,8 +10,11 @@ urlpatterns = [
     path("confirm-email/<str:token>/", views.confirm_email, name="confirm_email"),
     # FR-003: восстановление пароля (срок ссылки 24 ч — PASSWORD_RESET_TIMEOUT).
     # Ответ формы не раскрывает наличие аккаунта — стандартное поведение Django.
+    # extra_email_context: подставляем протокол и домен из настроек, иначе в
+    # письме окажется http:// и лишний редирект при переходе по ссылке
     path("password-reset/", auth_views.PasswordResetView.as_view(
-        template_name="accounts/password_reset.html"), name="password_reset"),
+        template_name="accounts/password_reset.html",
+        extra_email_context={"protocol": "https"}), name="password_reset"),
     path("password-reset/done/", auth_views.PasswordResetDoneView.as_view(
         template_name="accounts/password_reset_done.html"), name="password_reset_done"),
     path("reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(

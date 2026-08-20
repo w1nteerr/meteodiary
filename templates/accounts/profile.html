@@ -6,6 +6,7 @@
 <button name="change_email">Сменить e-mail</button></form></div>
 <div class="card"><h3>Смена пароля</h3>
 <form method="post">{% csrf_token %}{{ pwd_form.as_p }}
+{% include "accounts/_password_help.html" %}
 <button name="change_password">Сменить пароль</button></form></div>
 <div class="card"><h3>Доступ к API (точка входа для приёма данных)</h3>
 <p class="muted">Токен передаётся в заголовке <code>Authorization: Token &lt;ключ&gt;</code>.

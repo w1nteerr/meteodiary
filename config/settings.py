@@ -91,6 +91,11 @@ else:
 
 AUTH_USER_MODEL = "accounts.User"
 SITE_ID = 1
+# Домен и название сайта подставляются в письма (ссылка восстановления пароля,
+# подтверждение смены e-mail). Без этого Django берёт заглушку example.com и
+# ссылки в письмах ведут в никуда. Применяется командой set_site_domain.
+SITE_DOMAIN = os.environ.get("SITE_DOMAIN", "meteodiary.ru")
+SITE_NAME = os.environ.get("SITE_NAME", "Дневник синоптика")
 
 # --- Вход через сторонние сервисы (VK ID) ----------------------------------
 # Кнопка появляется, если заданы учётные данные приложения VK ID
@@ -113,8 +118,15 @@ SOCIALACCOUNT_ADAPTER = "accounts.adapters.SinoptikSocialAdapter"
 LOGIN_REDIRECT_URL = "map"
 
 AUTH_PASSWORD_VALIDATORS = [
+    # политика пароля ТЗ FR-001; требования дублируются подсказкой в форме
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-     "OPTIONS": {"min_length": 8}},  # политика пароля ТЗ FR-001
+     "OPTIONS": {"min_length": 8}},
+    # пароль не должен совпадать с логином или e-mail
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    # отсекает пароли из списка самых распространённых
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    # запрещает пароль только из цифр
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 # Хэширование паролей: Argon2/PBKDF2 (ТЗ 4.4). PBKDF2 — по умолчанию в Django.
 
