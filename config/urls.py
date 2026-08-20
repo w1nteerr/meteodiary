@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/notifications/", core_views.api_notifications, name="api_notifications"),
     path("dashboard/", core_views.dashboard, name="dashboard"),
     path("api/dashboard-data/", core_views.api_dashboard, name="api_dashboard"),
+    path("weather/", core_views.weather, name="weather"),
     path("privacy/", core_views.privacy, name="privacy"),
     path("healthz", core_views.healthz, name="healthz"),
     path("sw.js", core_views.service_worker, name="service_worker"),

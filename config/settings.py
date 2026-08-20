@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.vk",
+    "allauth.socialaccount.providers.yandex",
     "accounts",
     "stations",
     "observations",
@@ -97,10 +98,12 @@ SITE_ID = 1
 SITE_DOMAIN = os.environ.get("SITE_DOMAIN", "meteodiary.ru")
 SITE_NAME = os.environ.get("SITE_NAME", "Дневник синоптика")
 
-# --- Вход через сторонние сервисы (VK ID) ----------------------------------
-# Кнопка появляется, если заданы учётные данные приложения VK ID
-# (https://id.vk.com -> кабинет разработчика). Без них обычная регистрация
-# по логину/паролю работает как раньше.
+# --- Вход через сторонние сервисы -----------------------------------------
+# Поддерживаются VK ID и Яндекс ID. Кнопка каждого появляется, только если
+# заданы его ключи, — без них обычный вход по логину и паролю работает как
+# раньше. Ключи берутся из .env, в репозиторий не попадают.
+#   VK ID:     https://id.vk.com  (с 2025 требует верифицированный бизнес-профиль)
+#   Яндекс ID: https://oauth.yandex.ru  (доступен обычному пользователю)
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
@@ -108,9 +111,18 @@ AUTHENTICATION_BACKENDS = [
 VK_CLIENT_ID = os.environ.get("VK_CLIENT_ID", "")
 VK_SECRET = os.environ.get("VK_SECRET", "")
 VK_AUTH_ENABLED = bool(VK_CLIENT_ID and VK_SECRET)
-SOCIALACCOUNT_PROVIDERS = {
-    "vk": {"APP": {"client_id": VK_CLIENT_ID, "secret": VK_SECRET}},
-} if VK_AUTH_ENABLED else {}
+
+YANDEX_CLIENT_ID = os.environ.get("YANDEX_CLIENT_ID", "")
+YANDEX_SECRET = os.environ.get("YANDEX_SECRET", "")
+YANDEX_AUTH_ENABLED = bool(YANDEX_CLIENT_ID and YANDEX_SECRET)
+
+SOCIALACCOUNT_PROVIDERS = {}
+if VK_AUTH_ENABLED:
+    SOCIALACCOUNT_PROVIDERS["vk"] = {
+        "APP": {"client_id": VK_CLIENT_ID, "secret": VK_SECRET}}
+if YANDEX_AUTH_ENABLED:
+    SOCIALACCOUNT_PROVIDERS["yandex"] = {
+        "APP": {"client_id": YANDEX_CLIENT_ID, "secret": YANDEX_SECRET}}
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_METHODS = {"username"}
 SOCIALACCOUNT_LOGIN_ON_GET = True     # кнопка ведёт сразу к провайдеру

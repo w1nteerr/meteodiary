@@ -267,3 +267,92 @@ def privacy(request):
     return render(request, "core/privacy.html", {
         "updated_at": settings.PDN_POLICY_UPDATED,
     })
+
+
+def weather(request):
+    """Раздел «Погода»: поиск места, текущая погода, прогноз на 5 суток и
+    сравнение с замерами наблюдателей.
+
+    Сравнение показывается, только если рядом с выбранной точкой есть
+    подтверждённые наблюдения (в радиусе RADIUS_KM за последние сутки) —
+    иначе сравнивать не с чем, и блок просто не выводится.
+    """
+    from math import cos, radians
+    from datetime import timedelta
+    from django.conf import settings
+    from django.utils import timezone
+    from observations.models import Observation, Status
+    from observations.weather_owm import (WeatherError, current_cached,
+                                          forecast, geocode)
+
+    RADIUS_KM = 30
+
+    query = (request.GET.get("q") or "").strip()
+    lat = request.GET.get("lat")
+    lon = request.GET.get("lon")
+
+    ctx = {"query": query, "enabled": bool(settings.OWM_API_KEY)}
+    if not ctx["enabled"]:
+        ctx["error"] = "Раздел недоступен: не задан ключ погодного сервиса."
+        return render(request, "core/weather.html", ctx)
+
+    try:
+        # координаты пришли явно (пользователь выбрал место из списка)
+        if lat and lon:
+            place = {"name": request.GET.get("name") or query or "Выбранное место",
+                     "lat": float(lat), "lon": float(lon)}
+        elif query:
+            found = geocode(query)
+            if not found:
+                ctx["not_found"] = True
+                return render(request, "core/weather.html", ctx)
+            if len(found) > 1:
+                ctx["places"] = found          # предложим выбрать из списка
+                return render(request, "core/weather.html", ctx)
+            place = found[0]
+        else:
+            return render(request, "core/weather.html", ctx)
+
+        ctx["place"] = place
+        ctx["current"] = current_cached(place["lat"], place["lon"])
+        try:
+            ctx["forecast"] = forecast(place["lat"], place["lon"])
+        except WeatherError:
+            ctx["forecast"] = []      # прогноз не критичен, текущая погода важнее
+
+    except WeatherError as e:
+        ctx["error"] = str(e)
+        return render(request, "core/weather.html", ctx)
+    except (TypeError, ValueError):
+        ctx["error"] = "Некорректные координаты."
+        return render(request, "core/weather.html", ctx)
+
+    # --- сравнение с наблюдениями поблизости ---
+    # Грубая рамка по координатам: 1° широты ≈ 111 км, долгота сужается к полюсам.
+    d_lat = RADIUS_KM / 111.0
+    d_lon = RADIUS_KM / (111.0 * max(cos(radians(place["lat"])), 0.01))
+    since = timezone.now() - timedelta(hours=24)
+
+    near = (Observation.objects
+            .filter(status=Status.APPROVED, is_archived=False,
+                    observed_at__gte=since,
+                    temperature__isnull=False,
+                    station__latitude__gte=place["lat"] - d_lat,
+                    station__latitude__lte=place["lat"] + d_lat,
+                    station__longitude__gte=place["lon"] - d_lon,
+                    station__longitude__lte=place["lon"] + d_lon)
+            .select_related("station").order_by("-observed_at")[:20])
+
+    if near:
+        temps = [float(o.temperature) for o in near]
+        obs_avg = round(sum(temps) / len(temps), 1)
+        service_t = ctx["current"].get("temperature")
+        ctx["compare"] = {
+            "count": len(near),
+            "obs_avg": obs_avg,
+            "service": service_t,
+            "diff": round(obs_avg - service_t, 1) if service_t is not None else None,
+            "radius": RADIUS_KM,
+            "items": near[:5],
+        }
+    return render(request, "core/weather.html", ctx)

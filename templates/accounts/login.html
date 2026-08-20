@@ -1,7 +1,7 @@
-{% extends "base.html" %}{% block title %}Вход{% endblock %}
+{% extends "base.html" %}{% load static %}{% block title %}Вход{% endblock %}
 {% block content %}
 <div class="auth-hero">
-  <div class="auth-title">☀ Дневник синоптика</div>
+  <div class="auth-title"><img src="{% static 'img/favicon-64.png' %}" alt="" class="auth-ico" width="34" height="34">Дневник синоптика</div>
   <div class="auth-sub">Войдите, чтобы вести наблюдения</div>
 </div>
 <div class="card auth">
@@ -12,8 +12,16 @@
   <label>Пароль</label><input name="password" type="password" required>
   <p><button type="submit">Войти</button></p>
 </form>
-{% if vk_auth_enabled %}
-<p><a class="btn sec" href="/auth/vk/login/">Войти через VK ID</a></p>
+{% if social_auth_enabled %}
+<div class="social-auth">
+  <div class="social-sep"><span>или войдите через</span></div>
+  {% if yandex_auth_enabled %}
+    <a class="btn sec social-btn" href="/auth/yandex/login/">Яндекс ID</a>
+  {% endif %}
+  {% if vk_auth_enabled %}
+    <a class="btn sec social-btn" href="/auth/vk/login/">VK ID</a>
+  {% endif %}
+</div>
 {% endif %}
 <p class="muted"><a href="{% url 'password_reset' %}">Забыли пароль?</a> ·
    <a href="{% url 'register' %}">Регистрация</a></p>

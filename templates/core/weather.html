@@ -1,0 +1,103 @@
+{% extends "base.html" %}{% block title %}Погода{% endblock %}
+{% block content %}
+<h1 class="page-title">Погода</h1>
+
+<div class="panel">
+  <form method="get" class="wx-search">
+    <div class="wx-search-field">
+      <label for="q">Населённый пункт</label>
+      <input id="q" name="q" value="{{ query }}" placeholder="например, Казань"
+             autocomplete="off" {% if not place %}autofocus{% endif %}>
+    </div>
+    <button type="submit">Показать</button>
+  </form>
+  {% if not enabled %}<p class="muted">{{ error }}</p>{% endif %}
+</div>
+
+{% if error and enabled %}<div class="msg error">{{ error }}</div>{% endif %}
+{% if not_found %}<div class="msg info">Ничего не нашлось по запросу «{{ query }}».</div>{% endif %}
+
+{% if places %}
+<div class="panel">
+  <h3>Уточните место</h3>
+  <ul class="wx-places">
+    {% for p in places %}
+      <li><a href="?name={{ p.name|urlencode }}&lat={{ p.lat }}&lon={{ p.lon }}">
+        {{ p.name }}{% if p.state %}, {{ p.state }}{% endif %}
+        <span class="muted">{{ p.country }} · {{ p.lat }}, {{ p.lon }}</span></a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if current %}
+<div class="panel wx-now">
+  <h3>Сейчас — {{ place.name }}</h3>
+  <div class="wx-now-row">
+    <div class="wx-temp">{{ current.temperature|floatformat:0 }}°</div>
+    <div class="wx-now-info">
+      <div class="wx-descr">{{ current.description }}</div>
+      <div class="muted">по данным {{ current.source }}</div>
+    </div>
+    <ul class="wx-params">
+      {% if current.pressure %}<li><span>Давление</span><b>{{ current.pressure|floatformat:0 }} гПа</b></li>{% endif %}
+      {% if current.wind_speed is not None %}<li><span>Ветер</span><b>{{ current.wind_speed }} м/с{% if current.wind_direction %}, {{ current.wind_direction }}{% endif %}</b></li>{% endif %}
+      {% if current.cloudiness is not None %}<li><span>Облачность</span><b>{{ current.cloudiness }}%</b></li>{% endif %}
+      <li><span>Осадки за час</span><b>{{ current.precipitation_amount }} мм</b></li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if compare %}
+<div class="panel wx-compare">
+  <h3>Сравнение с наблюдателями</h3>
+  <p class="muted" style="font-size:13px;margin-top:-6px">
+    За последние сутки в радиусе {{ compare.radius }} км найдено
+    наблюдений: {{ compare.count }}.</p>
+  <div class="wx-cmp-row">
+    <div class="wx-cmp-cell">
+      <div class="wx-cmp-label">Метеосервис</div>
+      <div class="wx-cmp-val">{{ compare.service|floatformat:1 }} °C</div>
+    </div>
+    <div class="wx-cmp-cell">
+      <div class="wx-cmp-label">Наблюдатели (среднее)</div>
+      <div class="wx-cmp-val">{{ compare.obs_avg|floatformat:1 }} °C</div>
+    </div>
+    {% if compare.diff is not None %}
+    <div class="wx-cmp-cell">
+      <div class="wx-cmp-label">Расхождение</div>
+      <div class="wx-cmp-val {% if compare.diff > 0 %}up{% elif compare.diff < 0 %}down{% endif %}">
+        {% if compare.diff > 0 %}+{% endif %}{{ compare.diff|floatformat:1 }} °C</div>
+    </div>
+    {% endif %}
+  </div>
+  <ul class="dl wx-cmp-list">
+    {% for o in compare.items %}
+      <li><span class="dot"></span>{{ o.station.name }} — {{ o.temperature }} °C
+        <span class="pc">{{ o.observed_at|date:"d.m H:i" }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if forecast %}
+<div class="panel">
+  <h3>Прогноз на {{ forecast|length }} суток</h3>
+  <div class="wx-fc">
+    {% for d in forecast %}
+    <div class="wx-fc-day">
+      <div class="wx-fc-date">{{ d.date|slice:"8:10" }}.{{ d.date|slice:"5:7" }}</div>
+      <div class="wx-fc-temp"><b>{{ d.t_max|floatformat:0 }}°</b>
+        <span class="muted">{{ d.t_min|floatformat:0 }}°</span></div>
+      <div class="wx-fc-descr">{{ d.description }}</div>
+      <div class="muted wx-fc-extra">
+        {% if d.precip %}осадки {{ d.precip }} мм{% endif %}
+        {% if d.wind %}{% if d.precip %} · {% endif %}ветер {{ d.wind }} м/с{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

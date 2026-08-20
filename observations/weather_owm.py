@@ -83,3 +83,144 @@ def parse_current(payload):
         "description": (weather[0].get("description") or "").capitalize(),
         "source": "OpenWeatherMap",
     }
+
+
+# --- Прогноз и поиск городов ----------------------------------------------
+# Используется разделом «Погода»: поиск места по названию, текущая погода и
+# прогноз на 5 суток. Все ответы кэшируются, чтобы не упираться в лимит
+# бесплатного тарифа OpenWeatherMap (60 запросов в минуту).
+
+from django.core.cache import cache
+
+CACHE_CURRENT = 10 * 60      # текущая погода — 10 минут
+CACHE_FORECAST = 30 * 60     # прогноз — полчаса, он и так трёхчасовой
+CACHE_GEO = 24 * 3600        # координаты города меняться не будут
+
+
+def geocode(query, limit=5):
+    """Ищет место по названию. Возвращает список словарей с координатами."""
+    if not settings.OWM_API_KEY:
+        raise WeatherError("Ключ OpenWeatherMap не задан в настройках.")
+    query = (query or "").strip()
+    if len(query) < 2:
+        return []
+
+    key = f"owm:geo:{query.lower()}:{limit}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    url = "https://api.openweathermap.org/geo/1.0/direct?" + urllib.parse.urlencode({
+        "q": query, "limit": limit, "appid": settings.OWM_API_KEY})
+    try:
+        with urllib.request.urlopen(url, timeout=settings.WEATHER_TIMEOUT) as resp:
+            rows = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise WeatherError(f"Сервис поиска ответил ошибкой {e.code}.")
+    except (urllib.error.URLError, TimeoutError):
+        raise WeatherError("Сервис поиска недоступен — попробуйте позже.")
+    except (ValueError, json.JSONDecodeError):
+        raise WeatherError("Сервис поиска вернул неожиданный ответ.")
+
+    places = []
+    for r in rows or []:
+        # предпочитаем русское название, если оно есть
+        name = (r.get("local_names") or {}).get("ru") or r.get("name") or ""
+        places.append({
+            "name": name,
+            "country": r.get("country", ""),
+            "state": (r.get("local_names") or {}).get("ru_state") or r.get("state", ""),
+            "lat": round(float(r["lat"]), 4),
+            "lon": round(float(r["lon"]), 4),
+        })
+    cache.set(key, places, CACHE_GEO)
+    return places
+
+
+def current_cached(lat, lon):
+    """Текущая погода с кэшем — чтобы повторные открытия страницы не
+    расходовали лимит запросов."""
+    key = f"owm:cur:{round(float(lat), 3)}:{round(float(lon), 3)}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    data = fetch_current(lat, lon)
+    cache.set(key, data, CACHE_CURRENT)
+    return data
+
+
+def forecast(lat, lon, days=5):
+    """Прогноз на несколько суток (бесплатный тариф OWM: 5 дней, шаг 3 часа).
+
+    Возвращает список дней: дата, минимальная и максимальная температура,
+    преобладающее описание, осадки за сутки и почасовые точки.
+    """
+    if not settings.OWM_API_KEY:
+        raise WeatherError("Ключ OpenWeatherMap не задан в настройках.")
+
+    key = f"owm:fc:{round(float(lat), 3)}:{round(float(lon), 3)}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    url = "https://api.openweathermap.org/data/2.5/forecast?" + urllib.parse.urlencode({
+        "lat": f"{float(lat):.4f}", "lon": f"{float(lon):.4f}",
+        "appid": settings.OWM_API_KEY, "units": "metric", "lang": "ru"})
+    try:
+        with urllib.request.urlopen(url, timeout=settings.WEATHER_TIMEOUT) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise WeatherError("Ключ OpenWeatherMap не активирован.")
+        raise WeatherError(f"Сервис прогноза ответил ошибкой {e.code}.")
+    except (urllib.error.URLError, TimeoutError):
+        raise WeatherError("Сервис прогноза недоступен — попробуйте позже.")
+    except (ValueError, json.JSONDecodeError):
+        raise WeatherError("Сервис прогноза вернул неожиданный ответ.")
+
+    result = _group_forecast(payload, days)
+    cache.set(key, result, CACHE_FORECAST)
+    return result
+
+
+def _group_forecast(payload, days=5):
+    """Трёхчасовые точки OWM → сводка по суткам. Вынесено для тестов."""
+    from collections import defaultdict
+
+    by_day = defaultdict(list)
+    for item in (payload or {}).get("list", []):
+        day = item.get("dt_txt", "")[:10]     # «2026-08-21 15:00:00» → дата
+        if day:
+            by_day[day].append(item)
+
+    out = []
+    for day in sorted(by_day)[:days]:
+        points = by_day[day]
+        temps = [p["main"]["temp"] for p in points if p.get("main")]
+        if not temps:
+            continue
+        # преобладающее описание за день — то, что встречается чаще
+        descr = {}
+        for p in points:
+            d = ((p.get("weather") or [{}])[0].get("description") or "").capitalize()
+            if d:
+                descr[d] = descr.get(d, 0) + 1
+        precip = sum(float((p.get("rain") or {}).get("3h", 0))
+                     + float((p.get("snow") or {}).get("3h", 0)) for p in points)
+        winds = [p.get("wind", {}).get("speed") for p in points
+                 if p.get("wind", {}).get("speed") is not None]
+
+        out.append({
+            "date": day,
+            "t_min": round(min(temps), 1),
+            "t_max": round(max(temps), 1),
+            "description": max(descr, key=descr.get) if descr else "",
+            "precip": round(precip, 1),
+            "wind": round(max(winds), 1) if winds else None,
+            "hours": [{
+                "time": p["dt_txt"][11:16],
+                "temp": round(p["main"]["temp"], 1),
+                "descr": ((p.get("weather") or [{}])[0].get("description") or "").capitalize(),
+            } for p in points],
+        })
+    return out
