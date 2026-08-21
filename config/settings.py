@@ -122,7 +122,13 @@ if VK_AUTH_ENABLED:
         "APP": {"client_id": VK_CLIENT_ID, "secret": VK_SECRET}}
 if YANDEX_AUTH_ENABLED:
     SOCIALACCOUNT_PROVIDERS["yandex"] = {
-        "APP": {"client_id": YANDEX_CLIENT_ID, "secret": YANDEX_SECRET}}
+        "APP": {"client_id": YANDEX_CLIENT_ID, "secret": YANDEX_SECRET},
+        # без явного SCOPE Яндекс не передаёт почту и имя — пользователь
+        # создавался бы с автологином вида «user123» и пустым e-mail.
+        # Те же права нужно отметить в кабинете приложения на oauth.yandex.ru.
+        "SCOPE": ["login:email", "login:info"],
+        "AUTH_PARAMS": {"force_confirm": "yes"},
+    }
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_METHODS = {"username"}
 SOCIALACCOUNT_LOGIN_ON_GET = True     # кнопка ведёт сразу к провайдеру

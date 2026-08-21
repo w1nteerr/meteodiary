@@ -152,7 +152,8 @@ header{position:sticky;top:0;z-index:1100;
   background:color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
   border-bottom:1px solid var(--line);
-  padding:0 22px;display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+  padding:0 18px;display:flex;align-items:center;gap:2px;flex-wrap:nowrap;
+  min-height:56px}
 header a{color:var(--mut);text-decoration:none;padding:15px 11px;display:inline-block;
   font-size:14px;font-weight:500;transition:color .15s;position:relative}
 header a:not(.cta)::after{content:"";position:absolute;left:11px;right:100%;bottom:9px;
@@ -162,9 +163,10 @@ header a:hover{color:var(--b)}
 header a.cta{background:var(--b);color:#fff;border-radius:999px;
   padding:8px 18px;margin:0 8px;font-weight:600;transition:background .15s}
 header a.cta:hover{background:var(--b2);color:#fff}
-.brand-ico{width:26px;height:26px;vertical-align:-6px;margin-right:8px;flex:none}
-@media(max-width:860px){.brand-ico{width:24px;height:24px;vertical-align:-5px;margin-right:6px}}
-.brand{font-weight:800;font-size:18px;padding-right:14px;letter-spacing:-.2px;
+.brand-ico{width:24px;height:24px;flex:none}
+@media(max-width:860px){.brand-ico{width:22px;height:22px}}
+.brand{display:inline-flex;align-items:center;gap:8px;flex:none;
+  font-weight:800;font-size:18px;padding-right:14px;letter-spacing:-.2px;
   color:var(--b2)!important}
 
 main{max-width:1160px;margin:30px auto;padding:0 20px;animation:page-in .35s ease-out}
@@ -243,12 +245,14 @@ tr:hover td{background:var(--soft)}
 /* --- Графики и чипы --- */
 .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px}
 /* На узких экранах графики шли впритык друг к другу: добавляем вертикальный
-   отступ и внутренние поля, чтобы подписи осей не липли к краям карточки. */
+   отступ между карточками и поля внутри них.
+   ВАЖНО: padding у самого .ch не задаём — круговые диаграммы (роза ветров,
+   донат) вписываются в квадрат, и несимметричный отступ превращает круг
+   в овал. Воздух добавляем через .chart-card. */
 @media(max-width:560px){
   .charts-grid{grid-template-columns:1fr;gap:18px}
-  .chart-card{padding:16px 12px 18px}
+  .chart-card{padding:16px 14px 18px}
   .chart-card h3{margin-bottom:12px}
-  .ch{padding:4px 2px}
 }
 .chart-card h3{text-align:center}
 .ch{position:relative;margin:0 auto}
@@ -483,6 +487,19 @@ html[data-theme="dark"] .panel{box-shadow:none}
   .filters #f-apply{width:100%}
 }
 
+/* --- Переключатель темы в шапке: фиксированный размер и прижат вправо,
+   чтобы не съезжал, когда в меню много ссылок. --- */
+header #theme-toggle{flex:none;display:inline-flex;align-items:center;
+  justify-content:center;width:36px;height:36px;font-size:17px;padding:0;
+  border-radius:10px;margin-left:4px}
+header #theme-toggle:hover{background:var(--soft)}
+/* на десктопе меню занимает всё свободное место, но не переносится */
+@media(min-width:861px){
+  header .nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  header .nav::-webkit-scrollbar{display:none}
+  header .nav a{white-space:nowrap}
+}
+
 /* --- Раздел «Погода» --- */
 .wx-search{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
 .wx-search-field{flex:1 1 260px}
@@ -618,7 +635,10 @@ html[data-theme="dark"] .panel{box-shadow:none}
 /* --- Шапка: на десктопе ссылки в строку, на телефоне — выдвижное меню.
    Селекторы с повышенной специфичностью (header .nav ...), иначе общие
    правила для ссылок и кнопок перебивают display. --- */
-header .nav{display:flex;align-items:center;gap:6px;flex:1;flex-wrap:wrap}
+header .nav{display:flex;align-items:center;gap:6px;flex:1 1 auto;
+  min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+header .nav::-webkit-scrollbar{display:none}
+header .nav a{white-space:nowrap;flex:none}
 header .nav-gap{flex:1}
 header .nav-toggle{display:none}
 .nav-backdrop{display:none}
@@ -711,7 +731,7 @@ header .brand-short{display:none}
   /* тонкий разделитель перед «служебной» частью (профиль, выход, тема) */
   header .nav a[href*="notifications"]{
     border-top:1px solid var(--line);margin-top:6px;padding-top:14px}
-  header #theme-toggle{width:100%;justify-content:flex-start}
+  header #theme-toggle{width:36px;height:36px;margin-left:6px;order:2}
   header .nav a.nav-desktop-only{display:flex}
 
   /* Блокировка прокрутки фона, пока меню открыто. scrollbar-gutter резервирует
@@ -782,8 +802,8 @@ body.has-cookie-note{padding-bottom:var(--cookie-h,150px)}
       <a href="{% url 'login' %}">Вход</a>
       <a href="{% url 'register' %}" class="nav-desktop-only">Регистрация</a>
     {% endif %}
-    <a href="#" id="theme-toggle" title="Тёмная/светлая тема" style="font-size:16px">🌙</a>
   </nav>
+  <a href="#" id="theme-toggle" title="Тёмная/светлая тема" aria-label="Сменить тему">🌙</a>
 </header>
 <div id="nav-backdrop" class="nav-backdrop" hidden></div>
 <main>
