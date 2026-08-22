@@ -27,6 +27,9 @@ class MathCaptchaMixin(forms.Form):
 
 
 class RegisterForm(MathCaptchaMixin, UserCreationForm):
+    # skip_captcha=True используется на шаге подтверждения e-mail: проверку
+    # пользователь уже прошёл при первой отправке формы, а ответ из сессии
+    # к этому моменту израсходован (clean_captcha делает pop).
     email = forms.EmailField(label="E-mail", required=True)
     # ссылка на политику обязательна: согласие должно быть информированным
     consent = forms.BooleanField(required=True, label=mark_safe(
@@ -37,9 +40,11 @@ class RegisterForm(MathCaptchaMixin, UserCreationForm):
         model = User
         fields = ("username", "email")
 
-    def __init__(self, *args, session=None, **kwargs):
+    def __init__(self, *args, session=None, skip_captcha=False, **kwargs):
         self.session = session
         super().__init__(*args, **kwargs)
+        if skip_captcha:
+            self.fields.pop("captcha", None)
 
     def clean_email(self):
         email = self.cleaned_data["email"].lower()

@@ -15,7 +15,13 @@
 <tr><th>Повторных отправок</th><td>{{ obs.resubmit_count }}</td></tr>
 </table>
 {% if obs.photos.all %}<h3>Фото</h3>
-{% for ph in obs.photos.all %}<img src="{{ ph.image.url }}" style="max-width:220px;margin:4px;border-radius:6px">{% endfor %}
+<div class="row-photos">
+  {% for ph in obs.photos.all %}
+    <a href="{{ ph.image.url }}" target="_blank" rel="noopener" title="Открыть в полном размере">
+      <img src="{{ ph.image.url }}" alt="Фото наблюдения" loading="lazy">
+    </a>
+  {% endfor %}
+</div>
 {% endif %}
 </div>
 <div class="card">

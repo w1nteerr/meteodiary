@@ -34,6 +34,15 @@
           <span>{{ o.precipitation_type }}, {{ o.precipitation_amount }} мм</span>
         {% endif %}
       </div>
+      {% if o.photos.all %}
+      <div class="row-photos">
+        {% for ph in o.photos.all %}
+          <a href="{{ ph.image.url }}" target="_blank" rel="noopener" title="Открыть в полном размере">
+            <img src="{{ ph.image.url }}" alt="Фото наблюдения" loading="lazy">
+          </a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     <div class="row-actions">
       {% if o.status == "rework" and o.resubmit_count < max_resubmits %}

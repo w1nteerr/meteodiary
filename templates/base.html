@@ -136,7 +136,12 @@ html[data-theme="dark"] .auth-title{color:#ffffff}
 html[data-theme="dark"] #map{filter:brightness(.9) saturate(.85) contrast(1.02)}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,'Segoe UI',Arial,sans-serif;color:var(--tx);
-  background:var(--bg);min-height:100vh}
+  background:var(--bg);min-height:100vh;
+  /* колонка + растянутый main: футер всегда внизу окна, даже если
+     контента мало (иначе он «прилипал» сразу под текстом) */
+  display:flex;flex-direction:column}
+main{flex:1 0 auto}
+.site-footer{flex-shrink:0}
 /* --- Фон в духе base44: мягкие размытые «орбы» лайм/персик/коралл.
    Лежат под контентом фиксированным слоем; стеклянные карточки их
    размывают backdrop-filter'ом. Цвета орбов заданы переменными и
@@ -499,6 +504,19 @@ header #theme-toggle:hover{background:var(--soft)}
   header .nav::-webkit-scrollbar{display:none}
   header .nav a{white-space:nowrap}
 }
+
+/* --- Поле ввода кода подтверждения --- */
+.code-input{text-align:center;font-size:26px;letter-spacing:.35em;
+  font-weight:700;padding:12px 10px;font-family:ui-monospace,monospace}
+.code-input::placeholder{letter-spacing:.35em;opacity:.35;font-weight:400}
+
+/* --- Фотографии наблюдений: превью с открытием в полном размере --- */
+.row-photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.row-photos a{display:block;line-height:0;border-radius:10px;overflow:hidden;
+  border:1px solid var(--glass-line);transition:transform .15s,border-color .15s}
+.row-photos a:hover{transform:scale(1.03);border-color:var(--line)}
+.row-photos img{width:96px;height:96px;object-fit:cover;display:block}
+@media(max-width:560px){.row-photos img{width:78px;height:78px}}
 
 /* --- Раздел «Погода» --- */
 .wx-search{display:flex;gap:12px;align-items:end;flex-wrap:wrap}

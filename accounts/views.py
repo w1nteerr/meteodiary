@@ -48,21 +48,119 @@ def _send_welcome_email(request, user):
         log.warning("Не удалось отправить приветственное письмо", exc_info=True)
 
 
+# --- Подтверждение e-mail кодом при регистрации ----------------------------
+# Аккаунт создаётся только после ввода кода из письма: это отсекает
+# регистрации на несуществующие адреса и массовый спам.
+CONFIRM_TTL = 15 * 60          # код живёт 15 минут
+CONFIRM_MAX_TRIES = 5          # попыток ввода на один код
+CONFIRM_RESEND_PAUSE = 60      # не чаще одного письма в минуту
+
+
+def _confirm_key(request):
+    """Ключ хранения данных регистрации в кэше — привязан к сессии."""
+    if not request.session.session_key:
+        request.session.save()
+    return f"reg-confirm:{request.session.session_key}"
+
+
+def _send_code_email(email, code):
+    send_mail(
+        "Код подтверждения — Дневник синоптика",
+        (f"Код подтверждения регистрации: {code}\n\n"
+         "Введите его на странице регистрации в течение 15 минут.\n\n"
+         "Если вы не регистрировались, просто проигнорируйте это письмо."),
+        None, [email], fail_silently=False)
+
+
 def register(request):
-    """FR-001: регистрация наблюдателя (CAPTCHA, согласие на ПД, авто-вход)."""
+    """FR-001: регистрация наблюдателя.
+
+    Два шага: проверка формы (CAPTCHA, согласие на ПД) → подтверждение
+    e-mail кодом из письма. Пользователь создаётся только на втором шаге,
+    поэтому аккаунтов на несуществующие адреса не остаётся.
+    """
+    import random
+
+    key = _confirm_key(request)
+    pending = cache.get(key)
+
+    # --- шаг 2: ввод кода ---
+    if request.method == "POST" and request.POST.get("step") == "code":
+        if not pending:
+            messages.error(request, "Срок действия кода истёк. Заполните форму заново.")
+            return redirect("register")
+
+        code = (request.POST.get("code") or "").strip()
+        if pending["tries"] >= CONFIRM_MAX_TRIES:
+            cache.delete(key)
+            messages.error(request, "Слишком много попыток. Заполните форму заново.")
+            return redirect("register")
+
+        if code != pending["code"]:
+            pending["tries"] += 1
+            cache.set(key, pending, CONFIRM_TTL)
+            left = CONFIRM_MAX_TRIES - pending["tries"]
+            return render(request, "accounts/register_confirm.html", {
+                "email": pending["email"],
+                "error": f"Неверный код. Осталось попыток: {left}."})
+
+        # код верный — создаём пользователя
+        # капчу пользователь прошёл на шаге 1, ответ из сессии уже израсходован
+        form = RegisterForm(pending["data"], session=request.session, skip_captcha=True)
+        if not form.is_valid():
+            cache.delete(key)
+            messages.error(request, "Данные устарели. Заполните форму заново.")
+            return redirect("register")
+
+        user = form.save(commit=False)
+        user.role = Roles.OBSERVER
+        user.consent_at = timezone.now()   # фиксация согласия (ТЗ 4.4)
+        user.save()
+        cache.delete(key)
+        audit(request, "register", obj=f"user:{user.pk}")
+        _send_welcome_email(request, user)
+        # при нескольких бэкендах (пароль + соцвход) бэкенд указывается явно
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        messages.success(request, "Почта подтверждена. Добро пожаловать!")
+        return redirect("map")
+
+    # --- повторная отправка кода ---
+    if request.method == "POST" and request.POST.get("step") == "resend":
+        if pending and timezone.now().timestamp() - pending["sent_at"] >= CONFIRM_RESEND_PAUSE:
+            pending["sent_at"] = timezone.now().timestamp()
+            cache.set(key, pending, CONFIRM_TTL)
+            try:
+                _send_code_email(pending["email"], pending["code"])
+                messages.success(request, "Код отправлен повторно.")
+            except Exception:
+                log.warning("Не удалось отправить код", exc_info=True)
+                messages.error(request, "Не удалось отправить письмо. Попробуйте позже.")
+        elif pending:
+            messages.info(request, "Повторить отправку можно раз в минуту.")
+        return render(request, "accounts/register_confirm.html",
+                      {"email": pending["email"] if pending else ""})
+
+    # --- шаг 1: форма регистрации ---
     if request.method == "POST":
         form = RegisterForm(request.POST, session=request.session)
         if form.is_valid():
-            user = form.save(commit=False)
-            user.role = Roles.OBSERVER
-            user.consent_at = timezone.now()   # фиксация согласия (ТЗ 4.4)
-            user.save()
-            audit(request, "register", obj=f"user:{user.pk}")
-            _send_welcome_email(request, user)
-            # при нескольких бэкендах (пароль + VK ID) бэкенд указывается явно
-            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-            messages.success(request, "Регистрация выполнена. Добро пожаловать!")
-            return redirect("map")
+            email = form.cleaned_data["email"]
+            code = f"{random.randint(0, 999999):06d}"
+            try:
+                _send_code_email(email, code)
+            except Exception:
+                log.warning("Не удалось отправить код подтверждения", exc_info=True)
+                messages.error(request,
+                               "Не удалось отправить письмо на указанный адрес. "
+                               "Проверьте почту и попробуйте ещё раз.")
+                challenge = MathCaptchaMixin.make_challenge(request.session)
+                return render(request, "accounts/register.html",
+                              {"form": form, "captcha_q": challenge})
+
+            cache.set(key, {"data": request.POST.dict(), "email": email,
+                            "code": code, "tries": 0,
+                            "sent_at": timezone.now().timestamp()}, CONFIRM_TTL)
+            return render(request, "accounts/register_confirm.html", {"email": email})
     else:
         form = RegisterForm(session=request.session)
     challenge = MathCaptchaMixin.make_challenge(request.session)

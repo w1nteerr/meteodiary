@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% load static %}{% block title %}Подтверждение почты{% endblock %}
+{% block content %}
+<div class="auth-hero">
+  <div class="auth-title">
+    <img src="{% static 'img/favicon-64.png' %}" alt="" class="auth-ico" width="34" height="34">
+    Подтвердите почту</div>
+  <div class="auth-sub">Мы отправили шестизначный код на <b>{{ email }}</b></div>
+</div>
+<div class="card auth form-card" style="max-width:420px">
+  {% if error %}<div class="msg error">{{ error }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="step" value="code">
+    <label for="code">Код из письма</label>
+    <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+           class="code-input" autocomplete="one-time-code" required autofocus
+           placeholder="000000">
+    <p style="margin-top:16px"><button type="submit" style="width:100%">Подтвердить</button></p>
+  </form>
+  <form method="post" style="margin-top:6px">{% csrf_token %}
+    <input type="hidden" name="step" value="resend">
+    <button type="submit" class="sec" style="width:100%">Отправить код ещё раз</button>
+  </form>
+  <p class="muted" style="text-align:center;font-size:12.5px;margin-top:14px">
+    Код действует 15 минут. Не пришло письмо — проверьте папку «Спам»
+    или <a href="{% url 'register' %}">измените адрес</a>.</p>
+</div>
+{% endblock %}
